@@ -6,14 +6,14 @@
 pub mod discovery;
 #[cfg(feature = "gtk")]
 pub mod gtk_ui;
-#[cfg(feature = "winui")]
-pub mod win_ui;
 pub mod id;
 pub mod input;
 pub mod outputs;
 pub mod power;
 pub mod stats;
 pub mod video;
+#[cfg(feature = "winui")]
+pub mod win_ui;
 
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};

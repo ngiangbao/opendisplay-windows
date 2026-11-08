@@ -44,3 +44,6 @@ jobs:
           -p opendisplay-proto
           -p opendisplay-session
           -p od-fake-sender
+
+      - name: Test Windows receiver null sink
+        run: cargo test --locked -p od-receiver --no-default-features

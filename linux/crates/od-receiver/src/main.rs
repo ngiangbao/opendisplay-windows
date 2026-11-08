@@ -133,8 +133,8 @@ fn hello(a: &Args, guess: PanelGuess, install_id: &str) -> Result<Hello> {
     })
 }
 
-/// Panel facts from wl_output (the non-GTK sinks).
-fn wayland_guess(a: &Args) -> PanelGuess {
+/// Panel facts from the native output API (the non-GTK sinks).
+fn output_guess(a: &Args) -> PanelGuess {
     let fallback = || PanelGuess {
         output: a.output.clone(),
         ..Default::default()
@@ -148,7 +148,7 @@ fn wayland_guess(a: &Args) -> PanelGuess {
     let list = match outputs::enumerate() {
         Ok(list) => list,
         Err(e) => {
-            warn!("could not enumerate Wayland outputs: {e:#}");
+            warn!("could not enumerate outputs: {e:#}");
             return fallback();
         }
     };
@@ -166,7 +166,7 @@ fn wayland_guess(a: &Args) -> PanelGuess {
     match outputs::pick(&list, a.output.as_deref()) {
         Ok(o) => PanelGuess {
             pixels: Some((o.width as u32, o.height as u32)),
-            scale: Some(o.scale.max(1) as f64),
+            scale: Some(o.scale.max(1.0)),
             points: None,
             refresh: o.refresh_hz(),
             output: Some(o.name.clone()),
@@ -263,7 +263,7 @@ fn main() -> Result<()> {
 
     let rt = tokio::runtime::Runtime::new()?;
     let install_id = id::load_or_create()?;
-    let guess = wayland_guess(&a);
+    let guess = output_guess(&a);
     let output = guess.output.clone();
     let hello = hello(&a, guess, &install_id)?;
     let video = od_receiver::video::open(&VideoConfig {
@@ -390,26 +390,8 @@ fn win_main(a: Args) -> Result<()> {
     use od_receiver::win_ui::{self, WindowOptions};
     use std::sync::Arc;
 
-    let (mut event_loop, soft) = win_ui::prepare()?;
-    let guess = match win_ui::primary_monitor(&mut event_loop) {
-        Some(m) => {
-            info!(
-                "monitor {}: {}x{} scale {} {:?} Hz",
-                m.name, m.pixels.0, m.pixels.1, m.scale, m.refresh_hz
-            );
-            PanelGuess {
-                pixels: Some(m.pixels),
-                scale: Some(m.scale),
-                points: None,
-                refresh: m.refresh_hz,
-                output: Some(m.name),
-            }
-        }
-        None => PanelGuess {
-            output: a.output.clone(),
-            ..Default::default()
-        },
-    };
+    let (event_loop, soft) = win_ui::prepare()?;
+    let guess = output_guess(&a);
     let install_id = id::load_or_create()?;
     let hello = hello(&a, guess, &install_id)?;
 
@@ -444,9 +426,7 @@ fn win_main(a: Args) -> Result<()> {
     win_ui::run(
         event_loop,
         probe,
-        WindowOptions {
-            windowed,
-        },
+        WindowOptions { windowed },
         input_tx,
         move || {
             let _ = tx.send(true);

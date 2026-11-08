@@ -1,13 +1,12 @@
-//! Enumerate Wayland outputs (`wl_output` v4) to size `hello` from the real
-//! panel: physical pixels, refresh, scale, and the name `waylandsink` needs
-//! for `fullscreen-output`.
+//! Enumerate platform outputs to size `hello` from the real panel: physical
+//! pixels, refresh, scale, and the platform display name.
 
 #[cfg(target_os = "linux")]
 use std::collections::BTreeMap;
 
-use anyhow::{Context, Result};
 #[cfg(target_os = "linux")]
 use anyhow::bail;
+use anyhow::{Context, Result};
 #[cfg(target_os = "linux")]
 use wayland_client::protocol::{wl_output, wl_registry};
 #[cfg(target_os = "linux")]
@@ -21,7 +20,8 @@ pub struct OutputInfo {
     pub width: i32,
     pub height: i32,
     pub refresh_mhz: i32,
-    pub scale: i32,
+    /// Effective DPI scale relative to 96 DPI.
+    pub scale: f64,
 }
 
 impl OutputInfo {
@@ -98,7 +98,7 @@ impl Dispatch<wl_output::WlOutput, u32> for State {
                     info.refresh_mhz = refresh;
                 }
             }
-            wl_output::Event::Scale { factor } => info.scale = factor,
+            wl_output::Event::Scale { factor } => info.scale = factor as f64,
             wl_output::Event::Name { name } => info.name = name,
             wl_output::Event::Description { description } => info.description = description,
             _ => {}
@@ -126,8 +126,123 @@ pub fn enumerate() -> Result<Vec<OutputInfo>> {
         .collect())
 }
 
-/// Not implemented outside Linux yet (T1.2 adds the Windows monitor query).
-#[cfg(not(target_os = "linux"))]
+#[cfg(target_os = "windows")]
+mod windows {
+    use std::ffi::c_void;
+    use std::mem::{size_of, zeroed};
+    use std::ptr::{null, null_mut};
+
+    use windows_sys::Win32::Foundation::{LPARAM, RECT};
+    use windows_sys::Win32::Graphics::Gdi::{
+        DEVMODEW, ENUM_CURRENT_SETTINGS, EnumDisplayMonitors, EnumDisplaySettingsW,
+        GetMonitorInfoW, HDC, MONITORINFO, MONITORINFOEXW,
+    };
+    use windows_sys::Win32::UI::HiDpi::{GetDpiForMonitor, MDT_EFFECTIVE_DPI};
+
+    use super::OutputInfo;
+
+    const DEFAULT_DPI: u32 = 96;
+
+    pub fn enumerate() -> anyhow::Result<Vec<OutputInfo>> {
+        let mut outputs = Vec::new();
+        // SAFETY: the callback only uses `data` as the live `outputs` vector
+        // passed here. Windows invokes it synchronously before this call returns.
+        let ok = unsafe {
+            EnumDisplayMonitors(
+                null_mut(),
+                null(),
+                Some(callback),
+                (&mut outputs as *mut Vec<OutputInfo>) as LPARAM,
+            )
+        };
+        if ok == 0 {
+            anyhow::bail!("EnumDisplayMonitors failed")
+        }
+        Ok(outputs)
+    }
+
+    unsafe extern "system" fn callback(
+        monitor: *mut c_void,
+        _: HDC,
+        _: *mut RECT,
+        data: LPARAM,
+    ) -> i32 {
+        // SAFETY: `data` is the vector pointer supplied by `enumerate`, and the
+        // callback is synchronous. A failed monitor query is skipped while
+        // enumeration continues for the remaining monitors.
+        let outputs = unsafe { &mut *(data as *mut Vec<OutputInfo>) };
+        if let Some(info) = unsafe { monitor_info(monitor) } {
+            outputs.push(info);
+        }
+        1
+    }
+
+    unsafe fn monitor_info(monitor: *mut c_void) -> Option<OutputInfo> {
+        // SAFETY: both structures are plain Win32 data structures. Their size
+        // fields are initialized as required before passing writable pointers.
+        let mut info: MONITORINFOEXW = unsafe { zeroed() };
+        info.monitorInfo.cbSize = size_of::<MONITORINFOEXW>() as u32;
+        if unsafe { GetMonitorInfoW(monitor, &mut info.monitorInfo as *mut MONITORINFO) } == 0 {
+            return None;
+        }
+
+        let name = wide_string(&info.szDevice);
+        // SAFETY: `szDevice` is NUL-terminated storage owned by `info`; mode has
+        // the required dmSize and remains writable for the duration of the call.
+        let mut mode: DEVMODEW = unsafe { zeroed() };
+        mode.dmSize = size_of::<DEVMODEW>() as u16;
+        let has_mode = unsafe {
+            EnumDisplaySettingsW(info.szDevice.as_ptr(), ENUM_CURRENT_SETTINGS, &mut mode)
+        } != 0;
+
+        let rect = info.monitorInfo.rcMonitor;
+        let width = if has_mode {
+            mode.dmPelsWidth as i32
+        } else {
+            rect.right - rect.left
+        };
+        let height = if has_mode {
+            mode.dmPelsHeight as i32
+        } else {
+            rect.bottom - rect.top
+        };
+        let refresh_mhz = if has_mode && mode.dmDisplayFrequency > 1 {
+            mode.dmDisplayFrequency.saturating_mul(1000) as i32
+        } else {
+            0
+        };
+
+        let mut dpi_x = DEFAULT_DPI;
+        let mut dpi_y = DEFAULT_DPI;
+        // SAFETY: the monitor handle comes from EnumDisplayMonitors and both DPI
+        // pointers are valid. A failed query leaves the 96-DPI fallback in place.
+        if unsafe { GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &mut dpi_x, &mut dpi_y) } < 0 {
+            dpi_x = DEFAULT_DPI;
+        }
+
+        Some(OutputInfo {
+            description: name.clone(),
+            name,
+            width,
+            height,
+            refresh_mhz,
+            scale: dpi_x as f64 / DEFAULT_DPI as f64,
+        })
+    }
+
+    fn wide_string(value: &[u16]) -> String {
+        let len = value.iter().position(|&c| c == 0).unwrap_or(value.len());
+        String::from_utf16_lossy(&value[..len])
+    }
+}
+
+/// All active Windows monitors, named like `\\.\DISPLAY1`.
+#[cfg(target_os = "windows")]
+pub fn enumerate() -> Result<Vec<OutputInfo>> {
+    windows::enumerate()
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "windows")))]
 pub fn enumerate() -> Result<Vec<OutputInfo>> {
     anyhow::bail!("output enumeration is not implemented on this platform; pass --width/--height")
 }
@@ -149,7 +264,7 @@ pub fn pick(outputs: &[OutputInfo], name: Option<&str>) -> Result<OutputInfo> {
                         .join(", ")
                 )
             }),
-        None => outputs.first().cloned().context("no Wayland outputs found"),
+        None => outputs.first().cloned().context("no outputs found"),
     }
 }
 
@@ -165,7 +280,7 @@ mod tests {
             width: 1280,
             height: 720,
             refresh_mhz,
-            scale: 1,
+            scale: 1.0,
         };
         assert_eq!(o(0).refresh_hz(), None);
         assert_eq!(o(59_940).refresh_hz(), Some(60));

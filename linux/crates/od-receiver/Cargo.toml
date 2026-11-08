@@ -44,5 +44,8 @@ openh264 = { workspace = true, optional = true }
 wayland-client = { workspace = true }
 zbus = { workspace = true, optional = true }
 
+[target.'cfg(target_os = "windows")'.dependencies]
+windows-sys = { workspace = true }
+
 [dev-dependencies]
 od-fake-sender = { path = "../od-fake-sender" }

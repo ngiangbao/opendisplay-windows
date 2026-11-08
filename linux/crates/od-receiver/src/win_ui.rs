@@ -150,7 +150,9 @@ pub fn primary_monitor(event_loop: &mut EventLoop<()>) -> Option<PrimaryMonitor>
     struct Probe(Option<PrimaryMonitor>);
     impl ApplicationHandler<()> for Probe {
         fn resumed(&mut self, el: &ActiveEventLoop) {
-            let m = el.primary_monitor().or_else(|| el.available_monitors().next());
+            let m = el
+                .primary_monitor()
+                .or_else(|| el.available_monitors().next());
             self.0 = m.map(|m| {
                 let size = m.size();
                 PrimaryMonitor {
@@ -246,8 +248,7 @@ impl App {
             return;
         };
         let size = window.inner_size();
-        let (Some(w), Some(h)) = (NonZeroU32::new(size.width), NonZeroU32::new(size.height))
-        else {
+        let (Some(w), Some(h)) = (NonZeroU32::new(size.width), NonZeroU32::new(size.height)) else {
             return;
         };
         if let Err(e) = surface.resize(w, h) {
