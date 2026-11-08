@@ -140,6 +140,25 @@ pub fn is_virtual(device_name: &str) -> bool {
     }
 }
 
+/// Every display device Windows knows (name, adapter description, state
+/// flags: bit 0 = attached to the desktop), for `doctor`.
+pub fn devices() -> Vec<(String, String, u32)> {
+    use windows::Win32::Graphics::Gdi::{DISPLAY_DEVICEW, EnumDisplayDevicesW};
+    let mut out = Vec::new();
+    for i in 0..32 {
+        let mut dd = DISPLAY_DEVICEW {
+            cb: std::mem::size_of::<DISPLAY_DEVICEW>() as u32,
+            ..Default::default()
+        };
+        // SAFETY: `dd` has its size set; a null device enumerates adapters.
+        if !unsafe { EnumDisplayDevicesW(PCWSTR::null(), i, &mut dd, 0) }.as_bool() {
+            break;
+        }
+        out.push((wide(&dd.DeviceName), wide(&dd.DeviceString), dd.StateFlags.0));
+    }
+    out
+}
+
 /// A Virtual Display Driver output that exists but is not part of the desktop
 /// (we detach it when a session ends). `None` if there is none.
 pub fn detached_virtual() -> Option<String> {

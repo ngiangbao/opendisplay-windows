@@ -23,6 +23,20 @@ pub fn doctor(_req: &Request, config_path: Option<&Path>) -> bool {
             }
             Err(e) => println!("monitor:  could not list monitors: {e:#}"),
         }
+        for (name, adapter, flags) in crate::backend::win::monitors::devices() {
+            println!(
+                "device:   {name}  {adapter}  {}",
+                if flags & 1 != 0 { "attached" } else { "NOT attached to the desktop" }
+            );
+        }
+        println!(
+            "driver:   Virtual Display Driver {}",
+            if crate::backend::win::vdd::installed() {
+                "installed (settings file found)"
+            } else {
+                "not installed"
+            }
+        );
     }
     #[cfg(not(windows))]
     println!("backend:  none for this platform");

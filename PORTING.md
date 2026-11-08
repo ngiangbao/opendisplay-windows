@@ -68,7 +68,12 @@ Claim a task by opening an issue or PR titled with the task id. Keep PRs small.
 ## Verification log
 - 2026-11-09 clean runner (windows-latest, Server 2025, no GPU): silent install/uninstall of our installer, exe runs without HOME, receiver listens, DXGI monitor listing works, extended display with the real driver works (see T2.8). Re-run: Actions > "Windows installer" and "Extended display e2e (throwaway VM)" (manual).
 
+## Maintainer's PC findings (2026-11-09, read-only checks + one real run)
+- The maintainer's PC already has the Virtual Display Driver installed (device `\\.\DISPLAY8`, detached when idle), a normal non-admin user can write `C:\VirtualDisplayDriver\vdd_settings.xml`, and the settings already hold 2732x2048 (iPad Pro 12.9\"), so their iPad reports 2732x2048 @2x. A real run of `send run` against a fake 2732x2048 receiver on that PC worked: re-attach, 200% scale, capture, stream, detach. So "Extend does not run" on their iPad is most likely the *discovery* step (iPad not found -> `send run --wait` waits forever) or an old installer. Mitigations in 0.4.2: the GUI says "looking for the receiver (open OpenDisplay on the iPad, same Wi-Fi)", the Find hint lists the checks (Private network, address), the installer adds a UDP 5353 discovery firewall rule for all profiles, the GUI logs to `%LOCALAPPDATA%\OpenDisplay\logs\activity.log`, and `send doctor` lists every display device with its attached state and the driver status. Ask for that log file when debugging with the maintainer.
+- Extend with no driver and one monitor now opens the driver install dialog from the Start button.
+
 ## Lessons (read before editing the sender)
+- `cargo test -p od-receiver` locally can pass while CI fails: a feature (here windows-sys `Win32_UI_WindowsAndMessaging`) was only enabled through winit in a `--features winui` build. Run the exact CI command (`cargo test --locked -p od-receiver --no-default-features`) before pushing.
 - Always run a real session after touching `session.rs` or the backend, not only unit tests: a closed mpsc channel made every Windows session exit at once and only the e2e caught it. Use `.github/workflows/vdd-e2e.yml` (manual run, installs the real driver on a throwaway VM) and `Windows installer` (clean-machine install smoke test).
 - The shell tool halves backslashes inside heredocs and sed/perl strings: `\\\\.\\pipe` became `\\.\\pipe`. Write Windows paths with the file-edit tools, then grep for a single backslash before a dot.
 
@@ -117,3 +122,4 @@ The other agents (CI/T1.2 and the T1.5 claimant) have stopped; everything was ta
 - 2026-11-09: extended display verified end to end on a throwaway VM; install flow switched from winget (wrong package) to the pinned setup exe + hash; v0.4.0.
 - 2026-11-09: virtual screen is detached after each session and re-attached on the next (verified on the throwaway VM); graceful stop from the control panel; fixed an exit-immediately regression found by the e2e; v0.4.1.
 - 2026-11-09: agents stopped; T1.5 (Windows suspend -> sleeping) implemented and unit-tested.
+- 2026-11-09: v0.4.2: discovery hints + firewall rule, activity log file, doctor shows device states, install prompt from Extend, fixed CI (windows-sys feature) for T1.5.

@@ -223,6 +223,23 @@ impl App {
             self.stop(Mode::Extend);
             return;
         }
+        // "New extended display" with no driver and no second screen cannot
+        // work: offer the one-time driver install right here instead of
+        // starting a session that would only fail.
+        let wants_extended = matches!(
+            self.e_screen
+                .selection()
+                .and_then(|i| self.monitors.borrow().get(i).cloned()),
+            Some(None)
+        );
+        if wants_extended
+            && !od_sender::vdd_installed()
+            && od_sender::list_monitors().iter().all(|m| m.primary)
+        {
+            self.log("[extend] Extended display needs the free virtual display driver first (one time).");
+            self.on_install();
+            return;
+        }
         let manual = self.e_manual.text().trim().to_string();
         let target = if !manual.is_empty() {
             manual
@@ -328,7 +345,9 @@ impl App {
             push_log(
                 &mut s,
                 &if n == 0 {
-                    "[extend] no receivers found (is OpenDisplay open on the other device?)".to_string()
+                    "[extend] no receivers found. Check: OpenDisplay is open on the iPad/other device (same Wi-Fi as this PC); \
+                     Windows shows this network as Private (Settings > Network); or type the iPad's address as host:port."
+                        .to_string()
                 } else {
                     format!("[extend] found {n} receiver(s)")
                 },
@@ -539,6 +558,13 @@ impl App {
         self.e_screen.set_selection(Some(0));
         *self.monitors.borrow_mut() = names;
         let computer = std::env::var("COMPUTERNAME").unwrap_or_else(|_| "this PC".into());
+        // Keep the log file small: start a new one when it grows past 1 MB.
+        if let Some(p) = log_path() {
+            if std::fs::metadata(&p).map(|m| m.len() > 1_000_000).unwrap_or(false) {
+                let _ = std::fs::remove_file(&p);
+            }
+            self.log(&format!("Log file: {}", p.display()));
+        }
         self.log(&format!("OpenDisplay ready. This computer is \"{computer}\"."));
         self.refresh();
     }
@@ -554,7 +580,26 @@ fn or_stopped(s: &str) -> &str {
     if s.is_empty() { "stopped" } else { s }
 }
 
+/// `%LOCALAPPDATA%\OpenDisplay\logs\activity.log`: everything shown in the
+/// Activity box, kept so a problem can be reported with the real log.
+fn log_path() -> Option<std::path::PathBuf> {
+    let d = std::env::var_os("LOCALAPPDATA")?;
+    Some(std::path::PathBuf::from(d).join("OpenDisplay").join("logs").join("activity.log"))
+}
+
+fn append_log_file(line: &str) {
+    use std::io::Write;
+    let Some(p) = log_path() else { return };
+    if let Some(dir) = p.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(p) {
+        let _ = writeln!(f, "{line}");
+    }
+}
+
 fn push_log(s: &mut Shared, line: &str) {
+    append_log_file(line);
     s.log.push_back(line.to_string());
     while s.log.len() > MAX_LOG_LINES {
         s.log.pop_front();
@@ -574,7 +619,9 @@ fn apply_status(mode: Mode, line: &str, s: &mut Shared) {
             }
         }
         Mode::Extend => {
-            if line.contains("connected to receiver") {
+            if line.contains("waiting for a receiver") || line.contains("looking for") {
+                s.extend_status = "looking for the receiver (open OpenDisplay on the iPad, same Wi-Fi)".into();
+            } else if line.contains("connected to receiver") {
                 s.extend_status = "connecting...".into();
             } else if line.contains("Extending onto") {
                 s.extend_status = "streaming".into();

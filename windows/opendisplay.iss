@@ -1,7 +1,7 @@
 ; Inno Setup script for OpenDisplay (Windows): ONE executable, receiver + sender.
 ; Built by build-installer.ps1.
 #ifndef AppVersion
-  #define AppVersion "0.4.1"
+  #define AppVersion "0.4.2"
 #endif
 #ifndef ExePath
   #define ExePath "C:\odt\release\opendisplay.exe"
@@ -50,7 +50,11 @@ Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -Fil
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""OpenDisplay Receiver"""; Flags: runhidden; Tasks: firewall
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""OpenDisplay"""; Flags: runhidden; Tasks: firewall
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""OpenDisplay"" dir=in action=allow program=""{app}\opendisplay.exe"" enable=yes profile=private,domain"; Flags: runhidden; Tasks: firewall
+; Finding the iPad (mDNS replies on UDP 5353) must also work when Windows labels the home Wi-Fi "Public".
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""OpenDisplay discovery"""; Flags: runhidden; Tasks: firewall
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""OpenDisplay discovery"" dir=in action=allow protocol=UDP localport=5353 program=""{app}\opendisplay.exe"" enable=yes profile=any"; Flags: runhidden; Tasks: firewall
 Filename: "{app}\opendisplay.exe"; Description: "Start OpenDisplay"; Flags: nowait postinstall skipifsilent
 
 [UninstallRun]
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""OpenDisplay"""; Flags: runhidden; RunOnceId: "DelFirewall"
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""OpenDisplay discovery"""; Flags: runhidden; RunOnceId: "DelFirewallDiscovery"
