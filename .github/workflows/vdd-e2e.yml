@@ -1,0 +1,85 @@
+name: Extended display e2e (throwaway VM)
+
+# Installs the Virtual Display Driver on a disposable GitHub runner and runs the
+# real "extend" path against a fake receiver (an iPad-sized panel), so the
+# driver integration (win/vdd.rs, prepare_virtual) is exercised without anyone's PC.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  vdd:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install NASM
+        shell: pwsh
+        run: |
+          choco install nasm -y --no-progress
+          "C:\Program Files\NASM" | Out-File -Append -Encoding ascii $env:GITHUB_PATH
+
+      - name: Build opendisplay
+        shell: pwsh
+        working-directory: linux
+        run: cargo build --release -p opendisplay
+
+      - name: Certificate stores before
+        shell: pwsh
+        run: |
+          Get-ChildItem Cert:\LocalMachine\Root, Cert:\LocalMachine\TrustedPublisher | Select-Object -ExpandProperty Thumbprint | Sort-Object | Out-File $env:RUNNER_TEMP\certs-before.txt
+
+      - name: Install Virtual Display Driver 25.5.2 (pinned, hash-checked)
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $dir = Join-Path $env:RUNNER_TEMP "vdd"; New-Item -ItemType Directory -Force $dir | Out-Null
+          gh release download 25.5.2 --repo VirtualDrivers/Virtual-Display-Driver -p "Virtual.Display.Driver-v25.05.03-setup-x64.exe" -D $dir
+          $f = Join-Path $dir "Virtual.Display.Driver-v25.05.03-setup-x64.exe"
+          $h = (Get-FileHash $f -Algorithm SHA256).Hash.ToLower()
+          "sha256: $h"
+          if ($h -ne "ca10b85babecfb636c85b3f04d2306968d4f940dd3dd35767f866207bfba846e") { throw "unexpected installer hash" }
+          Start-Process -FilePath $f -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART","/SP-","/LOG=$env:RUNNER_TEMP\vdd-install.log" -Wait
+          Start-Sleep -Seconds 8
+          "--- install log tail"; Get-Content "$env:RUNNER_TEMP\vdd-install.log" -ErrorAction SilentlyContinue | Select-Object -Last 40
+          "--- settings file"; Test-Path C:\VirtualDisplayDriver\vdd_settings.xml
+          "--- pnp devices"; Get-PnpDevice -PresentOnly -ErrorAction SilentlyContinue | Where-Object { $_.FriendlyName -match "Virtual|MTT|Indirect" -or $_.InstanceId -match "MTT" } | Format-Table Class, FriendlyName, Status -AutoSize | Out-String
+          "--- pipe"; [System.IO.Directory]::GetFiles("\\.\pipe\") | Where-Object { $_ -match "MTT" }
+
+      - name: Certificate stores after (did the installer add certificates?)
+        shell: pwsh
+        run: |
+          Get-ChildItem Cert:\LocalMachine\Root, Cert:\LocalMachine\TrustedPublisher | Select-Object -ExpandProperty Thumbprint | Sort-Object | Out-File $env:RUNNER_TEMP\certs-after.txt
+          $new = Compare-Object (Get-Content $env:RUNNER_TEMP\certs-before.txt) (Get-Content $env:RUNNER_TEMP\certs-after.txt) | Where-Object SideIndicator -eq "=>"
+          "new certificates: " + @($new).Count
+          foreach ($n in $new) { Get-ChildItem Cert:\LocalMachine\Root, Cert:\LocalMachine\TrustedPublisher | Where-Object Thumbprint -eq $n.InputObject | Format-List Subject, Issuer, Thumbprint, NotAfter, PSParentPath }
+
+      - name: Doctor (monitors with the driver present)
+        shell: pwsh
+        run: |
+          $exe = (Resolve-Path linux\target\release\opendisplay.exe).Path
+          Start-Process -FilePath $exe -ArgumentList "send doctor" -Wait -NoNewWindow -RedirectStandardOutput $env:RUNNER_TEMP\d.out -RedirectStandardError $env:RUNNER_TEMP\d.err
+          Get-Content $env:RUNNER_TEMP\d.out, $env:RUNNER_TEMP\d.err
+
+      - name: Extend to an iPad-sized fake receiver
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $exe = (Resolve-Path linux\target\release\opendisplay.exe).Path
+          $env:RUST_LOG = "debug"
+          $rx = Start-Process -FilePath $exe -ArgumentList "receive","--sink","none","--width","2360","--height","1640","--scale","2","--no-mdns" -PassThru -RedirectStandardOutput $env:RUNNER_TEMP\rx.out -RedirectStandardError $env:RUNNER_TEMP\rx.err
+          Start-Sleep -Seconds 3
+          Start-Process -FilePath $exe -ArgumentList "send","run","--to","127.0.0.1:9000","--duration","20","--no-reconnect" -Wait -NoNewWindow -RedirectStandardOutput $env:RUNNER_TEMP\tx.out -RedirectStandardError $env:RUNNER_TEMP\tx.err
+          Start-Sleep -Seconds 2
+          Stop-Process $rx -Force -ErrorAction SilentlyContinue
+          "===== sender"; Get-Content $env:RUNNER_TEMP\tx.out, $env:RUNNER_TEMP\tx.err | Where-Object { $_ -notmatch "OpenH264\]" } | Select-Object -First 80
+          "===== receiver"; Get-Content $env:RUNNER_TEMP\rx.out, $env:RUNNER_TEMP\rx.err | Select-Object -Last 15
+          "===== monitors after"
+          Start-Process -FilePath $exe -ArgumentList "send doctor" -Wait -NoNewWindow -RedirectStandardOutput $env:RUNNER_TEMP\d2.out -RedirectStandardError $env:RUNNER_TEMP\d2.err
+          Get-Content $env:RUNNER_TEMP\d2.out
+          "===== vdd_settings.xml resolutions"; Select-String -Path C:\VirtualDisplayDriver\vdd_settings.xml -Pattern "<width>|<height>" | ForEach-Object { $_.Line.Trim() }
