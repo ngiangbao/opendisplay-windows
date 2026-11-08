@@ -41,8 +41,8 @@ jobs:
           if (-not (Test-Path $exe)) { Get-Content "$env:RUNNER_TEMP\install.log" -ErrorAction SilentlyContinue | Select-Object -Last 30; throw "installer did not install $exe" }
           # The exe is a GUI-subsystem program, so wait for it explicitly and capture its output.
           foreach ($a in @("--version", "send doctor")) {
-            Start-Process -FilePath $exe -ArgumentList $a -Wait -NoNewWindow -RedirectStandardOutput "$env:RUNNER_TEMPi.out" -RedirectStandardError "$env:RUNNER_TEMPi.err"
-            "== opendisplay $a"; Get-Content "$env:RUNNER_TEMPi.out","$env:RUNNER_TEMPi.err"
+            Start-Process -FilePath $exe -ArgumentList $a -Wait -NoNewWindow -RedirectStandardOutput "$env:RUNNER_TEMP\cli.out" -RedirectStandardError "$env:RUNNER_TEMP\cli.err"
+            "== opendisplay $a"; Get-Content "$env:RUNNER_TEMP\cli.out","$env:RUNNER_TEMP\cli.err"
           }
           # The receiver must start with no HOME/XDG variables (as on a normal PC) and answer a protocol probe.
           $env:HOME = $null
