@@ -44,6 +44,7 @@ jobs:
           # The driver is signed (publisher: SignPath Foundation) but Windows still asks a human:
           # "Would you like to install this device software?". On this throwaway VM we click Install.
           Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes
+          Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public class Mouse { [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y); [DllImport("user32.dll")] public static extern void mouse_event(uint f, int dx, int dy, uint d, UIntPtr e); }'
           $p = Start-Process -FilePath $f -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART","/SP-","/LOG=$env:RUNNER_TEMP\vdd-install.log" -PassThru
           $clicked = 0
           $deadline = (Get-Date).AddSeconds(240)
@@ -53,7 +54,14 @@ jobs:
               $w = $root.FindFirst([System.Windows.Automation.TreeScope]::Children, (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty, "Windows Security")))
               if ($w) {
                 $btn = $w.FindFirst([System.Windows.Automation.TreeScope]::Descendants, (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty, "Install")))
-                if ($btn) { $btn.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke(); $clicked++; "clicked Install ($clicked) at " + (Get-Date -Format o); Start-Sleep -Seconds 3 }
+                if ($btn) {
+                  # The dialog's button has no Invoke pattern: click its centre with a real mouse event.
+                  $pt = $btn.GetClickablePoint()
+                  [Mouse]::SetCursorPos([int]$pt.X, [int]$pt.Y) | Out-Null
+                  Start-Sleep -Milliseconds 300
+                  [Mouse]::mouse_event(2, 0, 0, 0, [UIntPtr]::Zero); [Mouse]::mouse_event(4, 0, 0, 0, [UIntPtr]::Zero)
+                  $clicked++; "clicked Install ($clicked) at " + (Get-Date -Format o); Start-Sleep -Seconds 4
+                }
               }
             } catch { "ui automation: $_" }
             Start-Sleep -Milliseconds 500
