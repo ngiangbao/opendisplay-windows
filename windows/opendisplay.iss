@@ -1,7 +1,7 @@
 ; Inno Setup script for OpenDisplay (Windows): ONE executable, receiver + sender.
 ; Built by build-installer.ps1.
 #ifndef AppVersion
-  #define AppVersion "0.2.0"
+  #define AppVersion "0.3.0"
 #endif
 #ifndef ExePath
   #define ExePath "C:\odt\release\opendisplay.exe"
@@ -29,6 +29,7 @@ UninstallDisplayName=OpenDisplay
 [Tasks]
 Name: "firewall"; Description: "Allow OpenDisplay through Windows Firewall on private and domain networks (TCP 9000, UDP 9001, mDNS)"; GroupDescription: "Network:"
 Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Shortcuts:"; Flags: unchecked
+Name: "vdd"; Description: "Install the free Virtual Display Driver (needed for Extended display; Windows will ask permission)"; GroupDescription: "Extended display:"
 
 [InstallDelete]
 ; Remove the files of the old two-part 0.1.x installer when upgrading in place.
@@ -44,6 +45,7 @@ Name: "{group}\OpenDisplay (fullscreen display)"; Filename: "{app}\opendisplay.e
 Name: "{autodesktop}\OpenDisplay"; Filename: "{app}\opendisplay.exe"; Tasks: desktopicon
 
 [Run]
+Filename: "{cmd}"; Parameters: "/c winget install --id VirtualDrivers.Virtual-Display-Driver -e --accept-package-agreements --accept-source-agreements"; StatusMsg: "Installing the Virtual Display Driver..."; Flags: runhidden waituntilterminated; Tasks: vdd
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""OpenDisplay Receiver"""; Flags: runhidden; Tasks: firewall
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""OpenDisplay"""; Flags: runhidden; Tasks: firewall
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""OpenDisplay"" dir=in action=allow program=""{app}\opendisplay.exe"" enable=yes profile=private,domain"; Flags: runhidden; Tasks: firewall
