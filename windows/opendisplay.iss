@@ -1,7 +1,7 @@
 ; Inno Setup script for OpenDisplay (Windows): ONE executable, receiver + sender.
 ; Built by build-installer.ps1.
 #ifndef AppVersion
-  #define AppVersion "0.4.0"
+  #define AppVersion "0.4.1"
 #endif
 #ifndef ExePath
   #define ExePath "C:\odt\release\opendisplay.exe"

@@ -1,6 +1,6 @@
 # Builds opendisplay.exe (receiver + sender, release, static CRT) and the Inno Setup installer.
 # Prereqs: Rust + MSVC Build Tools, Inno Setup 6 (winget install JRSoftware.InnoSetup).
-param([string]$Version = "0.4.0", [string]$TargetDir = "C:\odt")
+param([string]$Version = "0.4.1", [string]$TargetDir = "C:\odt")
 $ErrorActionPreference = "Stop"
 $env:Path += ";$env:USERPROFILE\.cargo\bin"
 $env:CARGO_TARGET_DIR = $TargetDir          # short path avoids MAX_PATH link errors
