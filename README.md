@@ -23,6 +23,7 @@ apps keep working.
 - `linux/crates/od-receiver` — receiver (Linux today; Windows target in progress)
 - `linux/crates/od-sender` — sender (Wayland-specific today; Windows backend planned)
 - `Mac/`, `iOS/`, `Android/`, `MacReceiver/` — untouched upstream apps
+- [`PORTING.md`](PORTING.md) — progress notes and task board for contributors/agents
 - `README.upstream.md` — original upstream README
 
 ## Building (Windows)
