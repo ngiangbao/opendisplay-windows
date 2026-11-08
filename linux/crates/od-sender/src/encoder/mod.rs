@@ -12,18 +12,28 @@
 //!
 //! VA-API (Intel/AMD) slots in as another FFmpeg backend ahead of x264.
 
+#[cfg(target_os = "linux")]
 mod convert;
+#[cfg(target_os = "linux")]
 mod ffmpeg;
+#[cfg(not(target_os = "linux"))]
+mod nostage;
 mod openh264;
+#[cfg(target_os = "linux")]
 mod stage;
+#[cfg(target_os = "linux")]
 mod v4l2;
 
+#[cfg(not(target_os = "linux"))]
+pub use nostage::{ConvertStage, YuvFrame};
+#[cfg(target_os = "linux")]
 pub use stage::{ConvertStage, MIN_STAGE_WIDTH, YuvFrame};
 
 use std::time::Instant;
 
 use anyhow::{Result, anyhow, bail};
 use clap::ValueEnum;
+#[cfg(target_os = "linux")]
 use ffmpeg_next as ff;
 use opendisplay_proto::video::AccessUnit;
 use tracing::{debug, info};
@@ -42,8 +52,14 @@ pub enum Backend {
 /// `false` when no `/dev/video*` node is a V4L2 H.264 encoder, so
 /// [`Backend::V4l2m2m`] cannot open; `true` when one is, or when a node
 /// could not be asked.
+#[cfg(target_os = "linux")]
 pub fn v4l2m2m_present() -> bool {
     v4l2::h264_encoder() != v4l2::Presence::Absent
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn v4l2m2m_present() -> bool {
+    false
 }
 
 impl Backend {
@@ -74,6 +90,7 @@ pub struct Encoded {
 }
 
 enum Imp {
+    #[cfg(target_os = "linux")]
     Ffmpeg(ffmpeg::FfmpegEncoder),
     OpenH264(Box<openh264::OpenH264Encoder>),
 }
@@ -92,7 +109,10 @@ impl Encoder {
     pub fn new(width: u32, height: u32, s: EncoderSettings) -> Result<Self> {
         let (width, height) = (width & !1, height & !1);
         let order: &[Backend] = match s.backend {
+            #[cfg(target_os = "linux")]
             Backend::Auto => &[Backend::V4l2m2m, Backend::X264, Backend::Openh264],
+            #[cfg(not(target_os = "linux"))]
+            Backend::Auto => &[Backend::Openh264],
             Backend::V4l2m2m => &[Backend::V4l2m2m],
             Backend::X264 => &[Backend::X264],
             Backend::Openh264 => &[Backend::Openh264],
@@ -107,12 +127,18 @@ impl Encoder {
                     }
                     Err(anyhow!("no V4L2 H.264 encoder device"))
                 }
+                #[cfg(target_os = "linux")]
                 Backend::V4l2m2m => {
                     ffmpeg::FfmpegEncoder::new(ffmpeg::Kind::V4l2m2m, width, height, s)
                         .map(Imp::Ffmpeg)
                 }
+                #[cfg(target_os = "linux")]
                 Backend::X264 => ffmpeg::FfmpegEncoder::new(ffmpeg::Kind::X264, width, height, s)
                     .map(Imp::Ffmpeg),
+                #[cfg(not(target_os = "linux"))]
+                Backend::V4l2m2m | Backend::X264 => {
+                    Err(anyhow!("{} needs FFmpeg, which this platform build does not include", b.label()))
+                }
                 Backend::Openh264 => openh264::OpenH264Encoder::new(width, height, s)
                     .map(|e| Imp::OpenH264(Box::new(e))),
                 Backend::Auto => unreachable!(),
@@ -154,6 +180,7 @@ impl Encoder {
 
     /// The 4:2:0 format this encoder takes pre-converted frames in
     /// ([`FrameBuf::Yuv`] from a [`ConvertStage`]), if any.
+    #[cfg(target_os = "linux")]
     pub fn yuv_format(&self) -> Option<ff::format::Pixel> {
         match &self.imp {
             Imp::Ffmpeg(e) => Some(e.format()),
@@ -171,6 +198,7 @@ impl Encoder {
     /// encoder catches up.
     pub fn encode(&mut self, frame: &Frame, force_idr: bool) -> Result<Vec<Encoded>> {
         match (&frame.buf, &mut self.imp) {
+            #[cfg(target_os = "linux")]
             (
                 FrameBuf::Cpu {
                     pixels,
@@ -189,6 +217,7 @@ impl Encoder {
                 },
                 Imp::OpenH264(e),
             ) => e.encode(pixels, *stride, *format, force_idr, frame.captured_at),
+            #[cfg(target_os = "linux")]
             (FrameBuf::Yuv(y), Imp::Ffmpeg(e)) => e.encode_yuv(y, force_idr, frame.captured_at),
             (FrameBuf::Yuv(_), _) => bail!("{} takes RGB frames only", self.label()),
             (FrameBuf::Dmabuf { .. }, _) => bail!("{} cannot encode dmabuf frames", self.label()),

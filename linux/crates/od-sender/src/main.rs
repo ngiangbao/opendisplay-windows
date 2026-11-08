@@ -1,17 +1,27 @@
+// No Windows backend exists yet (T2.3), so the shared backend API is unused there.
+#![cfg_attr(not(target_os = "linux"), allow(dead_code))]
+
 mod backend;
+mod b64;
 mod bounded;
 mod config;
 mod desktop;
+#[cfg(target_os = "linux")]
 mod dev;
 mod disconnect;
 mod discover;
+#[cfg(target_os = "linux")]
+mod doctor;
+#[cfg(not(target_os = "linux"))]
+#[path = "doctor_win.rs"]
 mod doctor;
 mod encoder;
 mod latest;
-#[cfg(feature = "pipewire")]
+#[cfg(all(target_os = "linux", feature = "pipewire"))]
 mod pipewire;
 mod session;
 mod tailscale;
+#[cfg(target_os = "linux")]
 mod wayland;
 
 use std::net::SocketAddr;
@@ -169,7 +179,8 @@ enum Cmd {
         #[command(flatten)]
         backend: BackendArgs,
     },
-    /// Developer self-tests.
+    /// Developer self-tests (Linux only).
+    #[cfg(target_os = "linux")]
     #[command(hide = true)]
     Dev {
         #[command(subcommand)]
@@ -273,12 +284,17 @@ fn main() {
 fn real_main() -> Result<i32> {
     let args = Args::parse();
     // Before any thread exists: this rewrites the process environment.
+    #[cfg(target_os = "linux")]
     if let Some(i) = &args.instance {
         let inst = detect::select_instance(i)?;
         info!(
             "instance {} (pid {}, {})",
             inst.signature, inst.pid, inst.wl_socket
         );
+    }
+    #[cfg(not(target_os = "linux"))]
+    if args.instance.is_some() {
+        anyhow::bail!("--instance is only meaningful on Hyprland (Linux)");
     }
     match args.cmd {
         Cmd::Run {
@@ -329,7 +345,7 @@ fn real_main() -> Result<i32> {
                             scale: eff.scale.unwrap_or_default(),
                             max_fps: max_fps.or(config.max_fps),
                         },
-                        threads: dev::threads_or_all(threads),
+                        threads: threads_or_all(threads),
                         encoder: encoder.or(config.encoder).unwrap_or(encoder::Backend::Auto),
                         cursor: if no_cursor {
                             session::CursorMode::Off
@@ -406,7 +422,17 @@ fn real_main() -> Result<i32> {
                 info!("removed {}", removed.join(", "));
             }
         }
+        #[cfg(target_os = "linux")]
         Cmd::Dev { cmd } => dev::run(cmd)?,
     }
     Ok(0)
+}
+
+/// Encoder threads: the requested count, else every core.
+fn threads_or_all(t: u16) -> u16 {
+    if t == 0 {
+        std::thread::available_parallelism().map_or(4, |n| n.get() as u16)
+    } else {
+        t
+    }
 }

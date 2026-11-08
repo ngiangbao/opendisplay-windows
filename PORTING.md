@@ -36,7 +36,7 @@ Claim a task by opening an issue or PR titled with the task id. Keep PRs small.
 
 ### Phase 2 — Windows sender (extend PC to iPhone/iPad/Android/Mac)
 - [x] **T2.1** (done 2026-11-08) design written: [windows/DESIGN-sender.md](windows/DESIGN-sender.md). Recommendation: MVP adopts an existing monitor (no driver), DXGI Desktop Duplication + OpenH264 + SendInput; IddCx virtual display driver is an optional later step. Revised task list T2.2-T2.9 is in that file (it replaces the T2.2-T2.6 lines below). Open questions for the maintainer are at its end.
-- [ ] **T2.2** `od-sender` backend trait for Windows (`backend/windows/`): create/remove virtual monitor sized to receiver; position next to primary.
+- [x] **T2.2** (done 2026-11-09) `od-sender` builds and its 78 unit tests pass on Windows (`cargo test -p od-sender --no-default-features`). How: Linux-only deps moved to `[target.'cfg(target_os = "linux")'.dependencies]`; Wayland/PipeWire/D-Bus modules and the FFmpeg encoders are `cfg(target_os = "linux")`; Windows stand-ins: `backend/detect_win.rs` (always "unsupported" until T2.3), `doctor_win.rs`, `encoder/nostage.rs` (no convert stage, OpenH264 only), Windows branches in `backend/lock.rs` (share-mode lock in `%LOCALAPPDATA%OpenDisplay`), `disconnect.rs` (taskkill), `session.rs` (Ctrl+C/Break/close), `config.rs` (`%APPDATA%OpenDisplaysender.toml`). **Not verified on Linux** (no Linux machine here): the Linux paths are unchanged code behind `cfg(linux)`, but please run `cargo test -p od-sender` on Linux if you can. NEXT: T2.3 (`backend/windows`, replace `detect_win.rs`).
 - [ ] **T2.3** Capture: Windows.Graphics.Capture or DXGI Desktop Duplication of that monitor, with cursor.
 - [ ] **T2.4** Encode: reuse openh264/x264 first; later Media Foundation / NVENC hardware.
 - [ ] **T2.5** Input injection from receiver touch/scroll via `SendInput`.
@@ -82,3 +82,4 @@ cargo test -p opendisplay-proto -p opendisplay-session -p od-fake-sender
 - 2026-11-08: repo created; Rust installed; MSVC install pending; survey written.
 - 2026-11-08: T1.3 + T1.4 (mouse) done, installer script added, v0.1.0-receiver prerelease published. Open: T1.5 power events, T1.4 touch/pen follow-up, and remaining T1.6 work.
 - 2026-11-08: T2.1 design doc added (`windows/DESIGN-sender.md`). Next unclaimed: T2.2 (make `od-sender` compile on Windows).
+- 2026-11-09: T2.2 done (od-sender compiles + tests on Windows, CI step added). `od-sender doctor` runs and reports no backend; `run` exits 2 with a pointer to T2.3. Next unclaimed: T2.3.

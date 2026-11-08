@@ -27,7 +27,7 @@ use crate::config::{self, Config, Layer};
 use crate::desktop::{self, Debounce, DesktopOptions, DesktopPlan, PlanError, StreamPlan};
 use crate::encoder::{ConvertStage, Encoded, Encoder, EncoderSettings};
 use crate::latest;
-use crate::wayland::cursor::base64;
+use crate::b64::base64;
 
 /// How the pointer cursor reaches the receiver.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, clap::ValueEnum)]
@@ -545,6 +545,25 @@ fn place_workspace(backend: &mut dyn Backend, output: &str, ws: &str) {
 /// Resolves to `true` on SIGINT, SIGTERM or SIGHUP. Handled explicitly so the output
 /// is torn down in order, and because a sender started in the background by
 /// a non-interactive shell inherits SIGINT as ignored.
+#[cfg(windows)]
+fn shutdown_signal() -> Result<watch::Receiver<bool>> {
+    let (tx, rx) = watch::channel(false);
+    let mut c = tokio::signal::windows::ctrl_c()?;
+    let mut brk = tokio::signal::windows::ctrl_break()?;
+    let mut close = tokio::signal::windows::ctrl_close()?;
+    tokio::spawn(async move {
+        let name = tokio::select! {
+            _ = c.recv() => "Ctrl+C",
+            _ = brk.recv() => "Ctrl+Break",
+            _ = close.recv() => "console close",
+        };
+        info!("{name}: shutting down");
+        let _ = tx.send(true);
+    });
+    Ok(rx)
+}
+
+#[cfg(unix)]
 fn shutdown_signal() -> Result<watch::Receiver<bool>> {
     use tokio::signal::unix::{SignalKind, signal};
     let (tx, rx) = watch::channel(false);

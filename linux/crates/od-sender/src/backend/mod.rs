@@ -2,15 +2,22 @@
 //! frames, and injecting input. A backend is chosen once at
 //! startup by [`detect`]; the session loop only sees the traits below.
 
+#[cfg(target_os = "linux")]
 pub mod adopt;
 pub mod capture;
+#[cfg(target_os = "linux")]
 pub mod detect;
-#[cfg(feature = "gnome")]
+#[cfg(not(target_os = "linux"))]
+#[path = "detect_win.rs"]
+pub mod detect;
+#[cfg(all(target_os = "linux", feature = "gnome"))]
 pub mod gnome;
+#[cfg(target_os = "linux")]
 pub mod hyprland;
-#[cfg(feature = "kde")]
+#[cfg(all(target_os = "linux", feature = "kde"))]
 pub mod kde;
 pub mod lock;
+#[cfg(target_os = "linux")]
 pub mod wlroots;
 
 use std::fmt;

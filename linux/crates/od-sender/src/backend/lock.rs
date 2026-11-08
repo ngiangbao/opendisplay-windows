@@ -51,6 +51,10 @@ pub fn holder_pid(name: &str) -> Option<u32> {
 }
 
 pub fn dir() -> PathBuf {
+    #[cfg(windows)]
+    if let Some(d) = std::env::var_os("LOCALAPPDATA") {
+        return PathBuf::from(d).join("OpenDisplay");
+    }
     std::env::var_os("XDG_RUNTIME_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(std::env::temp_dir)
@@ -92,6 +96,37 @@ pub fn try_lock(name: &str) -> Result<Option<OutputLock>> {
     let dir = dir();
     std::fs::create_dir_all(&dir).with_context(|| format!("creating {}", dir.display()))?;
     let path = path(name);
+    #[cfg(windows)]
+    {
+        // Share mode READ only: a second opener asking for write access gets a
+        // sharing violation, readers (holder_pid) still work. Released on exit.
+        use std::os::windows::fs::OpenOptionsExt;
+        const FILE_SHARE_READ: u32 = 1;
+        const ERROR_SHARING_VIOLATION: i32 = 32;
+        let opened = std::fs::OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .write(true)
+            .share_mode(FILE_SHARE_READ)
+            .open(&path);
+        return match opened {
+            Ok(file) => {
+                use std::io::Write;
+                let _ = file.set_len(0);
+                let _ = (&file).write_all(format!("{}
+", std::process::id()).as_bytes());
+                Ok(Some(OutputLock { _file: file }))
+            }
+            Err(e) if e.raw_os_error() == Some(ERROR_SHARING_VIOLATION) => Ok(None),
+            Err(e) => Err(e).with_context(|| format!("opening {}", path.display())),
+        };
+    }
+    #[cfg(unix)]
+    unix_lock(path)
+}
+
+#[cfg(unix)]
+fn unix_lock(path: PathBuf) -> Result<Option<OutputLock>> {
     let file = std::fs::OpenOptions::new()
         .create(true)
         .truncate(false)
@@ -116,6 +151,7 @@ pub fn try_lock(name: &str) -> Result<Option<OutputLock>> {
     Err(e).with_context(|| format!("locking {}", path.display()))
 }
 
+#[cfg(unix)]
 unsafe extern "C" {
     fn flock(fd: i32, operation: i32) -> i32;
 }

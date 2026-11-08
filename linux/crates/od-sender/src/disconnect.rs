@@ -49,15 +49,7 @@ fn running() -> Result<Vec<Running>> {
         let Some(pid) = lock::holder_pid(&name) else {
             continue;
         };
-        let cmdline = std::fs::read(format!("/proc/{pid}/cmdline"))
-            .map(|b| {
-                b.split(|&c| c == 0)
-                    .filter(|s| !s.is_empty())
-                    .map(|s| String::from_utf8_lossy(s).into_owned())
-                    .collect::<Vec<_>>()
-                    .join(" ")
-            })
-            .unwrap_or_default();
+        let cmdline = proc_cmdline(pid);
         out.push(Running {
             output: name,
             pid,
@@ -67,14 +59,64 @@ fn running() -> Result<Vec<Running>> {
     Ok(out)
 }
 
+#[cfg(unix)]
 unsafe extern "C" {
     fn kill(pid: i32, sig: i32) -> i32;
 }
 
+#[cfg(unix)]
 const SIGINT: i32 = 2;
 
+#[cfg(unix)]
 fn alive(pid: u32) -> bool {
     std::path::Path::new(&format!("/proc/{pid}")).exists()
+}
+
+#[cfg(unix)]
+fn proc_cmdline(pid: u32) -> String {
+    std::fs::read(format!("/proc/{pid}/cmdline"))
+        .map(|b| {
+            b.split(|&c| c == 0)
+                .filter(|s| !s.is_empty())
+                .map(|s| String::from_utf8_lossy(s).into_owned())
+                .collect::<Vec<_>>()
+                .join(" ")
+        })
+        .unwrap_or_default()
+}
+
+// SAFETY: plain syscall; a stale pid at worst yields ESRCH.
+#[cfg(unix)]
+fn interrupt(pid: u32) -> std::io::Result<()> {
+    if unsafe { kill(pid as i32, SIGINT) } != 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    Ok(())
+}
+
+// Windows has no SIGINT for another process: ask `taskkill` to close it (it
+// receives the console close event, which `shutdown_signal` handles).
+#[cfg(windows)]
+fn interrupt(pid: u32) -> std::io::Result<()> {
+    let st = std::process::Command::new("taskkill")
+        .args(["/PID", &pid.to_string()])
+        .output()?
+        .status;
+    if st.success() { Ok(()) } else { Err(std::io::Error::other("taskkill failed")) }
+}
+
+#[cfg(windows)]
+fn alive(pid: u32) -> bool {
+    std::process::Command::new("tasklist")
+        .args(["/FI", &format!("PID eq {pid}"), "/NH"])
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).contains(&pid.to_string()))
+        .unwrap_or(false)
+}
+
+#[cfg(windows)]
+fn proc_cmdline(_pid: u32) -> String {
+    String::new()
 }
 
 /// Returns the process exit code: 0 when something was disconnected (or
@@ -99,14 +141,8 @@ pub fn run(wanted: Option<&str>) -> Result<i32> {
         }
     }
     for r in &targets {
-        // SAFETY: plain syscall; a stale pid at worst yields ESRCH.
-        if unsafe { kill(r.pid as i32, SIGINT) } != 0 {
-            warn!(
-                "could not signal pid {} ({}): {}",
-                r.pid,
-                r.output,
-                std::io::Error::last_os_error()
-            );
+        if let Err(e) = interrupt(r.pid) {
+            warn!("could not signal pid {} ({}): {e}", r.pid, r.output);
         }
     }
     // The sender stops capture, removes its display and closes the session;

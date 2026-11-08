@@ -47,3 +47,6 @@ jobs:
 
       - name: Test Windows receiver null sink
         run: cargo test --locked -p od-receiver --no-default-features
+
+      - name: Build and test od-sender (no Linux backends)
+        run: cargo test --locked -p od-sender --no-default-features

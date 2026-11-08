@@ -8,10 +8,10 @@ repository.workspace = true
 rust-version.workspace = true
 
 [features]
+pipewire = ["dep:pipewire"]
 default = ["kde", "gnome"]
 # PipeWire video capture (src/pipewire.rs), shared by the KDE and GNOME
 # backends; links libpipewire-0.3.
-pipewire = ["dep:pipewire"]
 # KDE Plasma backend: zkde_screencast virtual outputs, fake input.
 kde = ["pipewire"]
 # GNOME (Mutter): virtual monitor and input over Mutter's ScreenCast and
@@ -30,18 +30,21 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 toml = { workspace = true }
 miniz_oxide = { workspace = true }
+bitflags = { workspace = true }
+openh264 = { workspace = true }
+mdns-sd = { workspace = true }
+uuid = { workspace = true }
+
+# Linux-only: Wayland/PipeWire/D-Bus backends and the FFmpeg encoders. Windows
+# builds use OpenH264 plus its own backend (see windows/DESIGN-sender.md).
+[target.'cfg(target_os = "linux")'.dependencies]
 wayland-client = { workspace = true }
 wayland-protocols = { workspace = true }
 wayland-protocols-wlr = { workspace = true }
 wayland-scanner = { workspace = true }
 wayland-backend = { workspace = true }
-bitflags = { workspace = true }
 pipewire = { workspace = true, optional = true }
-openh264 = { workspace = true }
 ffmpeg-next = { workspace = true }
-mdns-sd = { workspace = true }
-uuid = { workspace = true }
 zbus = { workspace = true, optional = true }
-# Already in the tree through zbus; bound the wait for a D-Bus signal.
 async-io = { version = "2.6", optional = true }
 futures-lite = { version = "2.6", optional = true }

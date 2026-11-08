@@ -215,6 +215,10 @@ impl Config {
 
 /// `$XDG_CONFIG_HOME/opendisplay/sender.toml`, falling back to `~/.config`.
 pub fn default_path() -> Option<PathBuf> {
+    #[cfg(windows)]
+    if let Some(a) = std::env::var_os("APPDATA").filter(|v| !v.is_empty()) {
+        return Some(PathBuf::from(a).join("OpenDisplay").join("sender.toml"));
+    }
     let base = std::env::var_os("XDG_CONFIG_HOME")
         .filter(|v| !v.is_empty())
         .map(PathBuf::from)
