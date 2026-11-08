@@ -344,9 +344,14 @@ impl App {
         cmd.args(&args)
             .env("NO_COLOR", "1")
             .creation_flags(CREATE_NO_WINDOW)
-            .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
+        if mode == Mode::Extend {
+            // Closing this pipe is the graceful "stop" (see session.rs).
+            cmd.env("OPENDISPLAY_STOP_ON_STDIN_EOF", "1").stdin(Stdio::piped());
+        } else {
+            cmd.stdin(Stdio::null());
+        }
         let mut child = match cmd.spawn() {
             Ok(c) => c,
             Err(e) => {
@@ -428,6 +433,18 @@ impl App {
             Mode::Extend => &self.extend_child,
         };
         if let Some(mut c) = cell.borrow_mut().take() {
+            if mode == Mode::Extend && c.stdin.is_some() {
+                // Ask the sender to finish: it stops capture and detaches the
+                // virtual display. Kill it only if it does not exit in time.
+                drop(c.stdin.take());
+                let end = std::time::Instant::now() + std::time::Duration::from_secs(6);
+                while std::time::Instant::now() < end {
+                    if matches!(c.try_wait(), Ok(Some(_))) {
+                        break;
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(100));
+                }
+            }
             let _ = c.kill();
             let _ = c.wait();
         }

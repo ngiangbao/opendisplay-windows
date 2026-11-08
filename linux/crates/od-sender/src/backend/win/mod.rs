@@ -181,8 +181,16 @@ impl VirtualDisplay for WindowsDisplay {
         Ok(Box::new(input::WinInput::new(self.monitor.clone())))
     }
 
-    fn close(mut self: Box<Self>, _keep_output: bool) -> Result<()> {
+    fn close(mut self: Box<Self>, keep_output: bool) -> Result<()> {
         self.stop_capture();
+        if self.virtual_ && !keep_output {
+            // Do not leave an iPad-sized phantom screen on the desktop; the
+            // next session attaches it again.
+            match monitors::detach(&self.monitor.name) {
+                Ok(()) => info!("detached the virtual display {}", self.monitor.name),
+                Err(e) => info!("could not detach the virtual display: {e:#}"),
+            }
+        }
         Ok(())
     }
 }
@@ -230,6 +238,23 @@ fn prepare_virtual(spec: &DisplaySpec) -> Result<Monitor> {
         vdd::reload()?;
         std::thread::sleep(Duration::from_millis(1500));
     }
+    let right_edge = || -> i32 {
+        monitors::list()
+            .unwrap_or_default()
+            .iter()
+            .filter(|o| !monitors::is_virtual(&o.name))
+            .map(|o| o.x + o.width as i32)
+            .max()
+            .unwrap_or(0)
+    };
+    // The previous session detached the virtual screen: attach it again.
+    if find()?.is_none() {
+        if let Some(name) = monitors::detached_virtual() {
+            info!("re-attaching the virtual display {name}");
+            monitors::set_mode(&name, w, h, hz, Some((right_edge(), 0)))?;
+            std::thread::sleep(Duration::from_millis(800));
+        }
+    }
     let deadline = Instant::now() + Duration::from_secs(12);
     let m = loop {
         match find()? {
@@ -241,14 +266,7 @@ fn prepare_virtual(spec: &DisplaySpec) -> Result<Monitor> {
         }
     };
     if (m.width, m.height) != (w, h) || m.hz.round() as u32 != hz {
-        let others = monitors::list()?;
-        let x = others
-            .iter()
-            .filter(|o| o.name != m.name)
-            .map(|o| o.x + o.width as i32)
-            .max()
-            .unwrap_or(0);
-        monitors::set_mode(&m.name, w, h, hz, Some((x, 0)))?;
+        monitors::set_mode(&m.name, w, h, hz, Some((right_edge(), 0)))?;
         std::thread::sleep(Duration::from_millis(800));
     }
     // Match the receiver's own scale (an iPad is 2x) so the desktop is the

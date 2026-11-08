@@ -551,11 +551,23 @@ fn shutdown_signal() -> Result<watch::Receiver<bool>> {
     let mut c = tokio::signal::windows::ctrl_c()?;
     let mut brk = tokio::signal::windows::ctrl_break()?;
     let mut close = tokio::signal::windows::ctrl_close()?;
+    // The control panel starts us without a console and stops us by closing
+    // our stdin (it sets OPENDISPLAY_STOP_ON_STDIN_EOF), so the virtual
+    // display is detached in order instead of the process being killed.
+    let (stop_tx, mut stop_rx) = tokio::sync::mpsc::unbounded_channel::<()>();
+    if std::env::var_os("OPENDISPLAY_STOP_ON_STDIN_EOF").is_some() {
+        std::thread::spawn(move || {
+            let mut sink = Vec::new();
+            let _ = std::io::Read::read_to_end(&mut std::io::stdin(), &mut sink);
+            let _ = stop_tx.send(());
+        });
+    }
     tokio::spawn(async move {
         let name = tokio::select! {
             _ = c.recv() => "Ctrl+C",
             _ = brk.recv() => "Ctrl+Break",
             _ = close.recv() => "console close",
+            _ = stop_rx.recv() => "stop request from the control panel",
         };
         info!("{name}: shutting down");
         let _ = tx.send(true);

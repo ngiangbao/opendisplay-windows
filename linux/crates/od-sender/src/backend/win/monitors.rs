@@ -140,6 +140,65 @@ pub fn is_virtual(device_name: &str) -> bool {
     }
 }
 
+/// A Virtual Display Driver output that exists but is not part of the desktop
+/// (we detach it when a session ends). `None` if there is none.
+pub fn detached_virtual() -> Option<String> {
+    use windows::Win32::Graphics::Gdi::{DISPLAY_DEVICEW, EnumDisplayDevicesW};
+    const ATTACHED: u32 = 1; // DISPLAY_DEVICE_ATTACHED_TO_DESKTOP
+    let mut i = 0;
+    loop {
+        let mut dd = DISPLAY_DEVICEW {
+            cb: std::mem::size_of::<DISPLAY_DEVICEW>() as u32,
+            ..Default::default()
+        };
+        // SAFETY: `dd` has its size set; a null device enumerates adapters.
+        if !unsafe { EnumDisplayDevicesW(PCWSTR::null(), i, &mut dd, 0) }.as_bool() {
+            return None;
+        }
+        i += 1;
+        let adapter = wide(&dd.DeviceString).to_lowercase();
+        let id = wide(&dd.DeviceID).to_uppercase();
+        if (adapter.contains("virtual display") || id.contains("MTT")) && dd.StateFlags.0 & ATTACHED == 0 {
+            return Some(wide(&dd.DeviceName));
+        }
+    }
+}
+
+/// Remove a monitor from the desktop (zero size), so a virtual screen does not
+/// stay behind after a session. Windows windows move back to the other screens.
+pub fn detach(device_name: &str) -> Result<()> {
+    use windows::Win32::Graphics::Gdi::{
+        CDS_NORESET, CDS_TYPE, CDS_UPDATEREGISTRY, ChangeDisplaySettingsExW, DISP_CHANGE_SUCCESSFUL,
+        DM_PELSHEIGHT, DM_PELSWIDTH, DM_POSITION,
+    };
+    let name: Vec<u16> = device_name.encode_utf16().chain(std::iter::once(0)).collect();
+    // SAFETY: `name` is NUL-terminated; the DEVMODE has its size set.
+    unsafe {
+        let mut dm = DEVMODEW {
+            dmSize: std::mem::size_of::<DEVMODEW>() as u16,
+            dmFields: DM_PELSWIDTH | DM_PELSHEIGHT | DM_POSITION,
+            ..Default::default()
+        };
+        dm.Anonymous1.Anonymous2.dmPosition.x = 0;
+        dm.Anonymous1.Anonymous2.dmPosition.y = 0;
+        let r = ChangeDisplaySettingsExW(
+            PCWSTR(name.as_ptr()),
+            Some(&dm),
+            None,
+            CDS_UPDATEREGISTRY | CDS_NORESET,
+            None,
+        );
+        if r != DISP_CHANGE_SUCCESSFUL {
+            anyhow::bail!("Windows refused to detach {device_name} (code {})", r.0);
+        }
+        let r = ChangeDisplaySettingsExW(PCWSTR::null(), None, None, CDS_TYPE(0), None);
+        if r != DISP_CHANGE_SUCCESSFUL {
+            anyhow::bail!("Windows could not apply the detach (code {})", r.0);
+        }
+    }
+    Ok(())
+}
+
 /// Set a monitor's mode and (optionally) its top-left position in the virtual
 /// desktop, and apply it now. Windows keeps it for the next session too.
 pub fn set_mode(
@@ -151,7 +210,8 @@ pub fn set_mode(
 ) -> Result<()> {
     use windows::Win32::Graphics::Gdi::{
         CDS_NORESET, CDS_TYPE, CDS_UPDATEREGISTRY, ChangeDisplaySettingsExW, DISP_CHANGE_SUCCESSFUL,
-        DM_DISPLAYFREQUENCY, DM_PELSHEIGHT, DM_PELSWIDTH, DM_POSITION,
+        DM_BITSPERPEL, DM_DISPLAYFREQUENCY, DM_PELSHEIGHT, DM_PELSWIDTH, DM_POSITION,
+        ENUM_REGISTRY_SETTINGS,
     };
     let name: Vec<u16> = device_name.encode_utf16().chain(std::iter::once(0)).collect();
     // SAFETY: `name` is NUL-terminated; `dm` is initialised by
@@ -161,13 +221,24 @@ pub fn set_mode(
             dmSize: std::mem::size_of::<DEVMODEW>() as u16,
             ..Default::default()
         };
-        if !EnumDisplaySettingsW(PCWSTR(name.as_ptr()), ENUM_CURRENT_SETTINGS, &mut dm).as_bool() {
-            anyhow::bail!("cannot read the current mode of {device_name}");
+        // A detached monitor has no current mode: start from the registry one,
+        // else from a fresh 32-bit mode.
+        let have = EnumDisplaySettingsW(PCWSTR(name.as_ptr()), ENUM_CURRENT_SETTINGS, &mut dm).as_bool()
+            || EnumDisplaySettingsW(PCWSTR(name.as_ptr()), ENUM_REGISTRY_SETTINGS, &mut dm).as_bool();
+        if !have {
+            dm = DEVMODEW {
+                dmSize: std::mem::size_of::<DEVMODEW>() as u16,
+                dmBitsPerPel: 32,
+                ..Default::default()
+            };
         }
         dm.dmPelsWidth = width;
         dm.dmPelsHeight = height;
         dm.dmDisplayFrequency = hz;
-        dm.dmFields = DM_PELSWIDTH | DM_PELSHEIGHT | DM_DISPLAYFREQUENCY;
+        dm.dmFields = DM_PELSWIDTH | DM_PELSHEIGHT | DM_DISPLAYFREQUENCY | DM_BITSPERPEL;
+        if dm.dmBitsPerPel == 0 {
+            dm.dmBitsPerPel = 32;
+        }
         if let Some((x, y)) = pos {
             dm.Anonymous1.Anonymous2.dmPosition.x = x;
             dm.Anonymous1.Anonymous2.dmPosition.y = y;

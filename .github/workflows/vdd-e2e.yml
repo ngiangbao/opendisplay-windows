@@ -111,6 +111,17 @@ jobs:
           Get-Content $env:RUNNER_TEMP\d2.out
           "===== vdd_settings.xml resolutions"; Select-String -Path C:\VirtualDisplayDriver\vdd_settings.xml -Pattern "<width>|<height>" -ErrorAction SilentlyContinue | ForEach-Object { $_.Line.Trim() }
 
+          # Second session: the virtual screen must have been detached after the first one and be attached again now.
+          $rx2 = Start-Process -FilePath $exe -ArgumentList "receive","--sink","none","--width","1640","--height","2360","--scale","2","--no-mdns" -PassThru -RedirectStandardOutput $env:RUNNER_TEMP\rx2.out -RedirectStandardError $env:RUNNER_TEMP\rx2.err
+          Start-Sleep -Seconds 3
+          $tx2 = Start-Process -FilePath $exe -ArgumentList "send","run","--to","127.0.0.1:9000","--duration","12","--no-reconnect" -Wait -PassThru -NoNewWindow -RedirectStandardOutput $env:RUNNER_TEMP\tx2.out -RedirectStandardError $env:RUNNER_TEMP\tx2.err
+          "sender 2 exit code: $($tx2.ExitCode)"
+          Stop-Process $rx2 -Force -ErrorAction SilentlyContinue
+          "===== sender (portrait iPad, second session)"; Get-Content $env:RUNNER_TEMP\tx2.out, $env:RUNNER_TEMP\tx2.err | Where-Object { $_ -notmatch "OpenH264\]|PHONE-STATS|sent " } | Select-Object -First 30
+          "===== monitors after second session"
+          Start-Process -FilePath $exe -ArgumentList "send doctor" -Wait -NoNewWindow -RedirectStandardOutput $env:RUNNER_TEMP\d3.out -RedirectStandardError $env:RUNNER_TEMP\d3.err
+          Get-Content $env:RUNNER_TEMP\d3.out
+
       - uses: actions/upload-artifact@v4
         if: always()
         with:
