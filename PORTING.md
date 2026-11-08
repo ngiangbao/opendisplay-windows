@@ -50,7 +50,7 @@ Claim a task by opening an issue or PR titled with the task id. Keep PRs small.
 - [ ] **T2.7** hardware H.264 encode (Media Foundation), **T2.9** polish: cursor painting/side channel, rotated monitors, release-build performance numbers.
 
 ## Release
-**v0.2.0** ships one installer, `OpenDisplay-Setup-0.2.0.exe`, containing ONE executable `opendisplay.exe` (receiver + sender). `opendisplay` = receiver window; `opendisplay receive [opts]`; `opendisplay send [opts]` (sender: no display backend yet, see T2.3). v0.1.0-receiver (two-part, receiver only) is superseded. Unsigned, so SmartScreen warns. Rebuild: `windowsuild-installer.ps1` (Rust, MSVC Build Tools, Inno Setup 6). The exe imports only system DLLs (static CRT), requires Windows 10+ x64 (ARM64 runs it under emulation).
+**v0.3.1** ships `OpenDisplay-Setup-0.3.1.exe` (control panel, extended display via the Virtual Display Driver, NASM-optimised H.264; v0.2.0/v0.3.0 are superseded). Older text follows: v0.2.0 shipped `OpenDisplay-Setup-0.2.0.exe`, containing ONE executable `opendisplay.exe` (receiver + sender). `opendisplay` = receiver window; `opendisplay receive [opts]`; `opendisplay send [opts]` (sender: no display backend yet, see T2.3). v0.1.0-receiver (two-part, receiver only) is superseded. Unsigned, so SmartScreen warns. Rebuild: `windowsuild-installer.ps1` (Rust, MSVC Build Tools, Inno Setup 6). The exe imports only system DLLs (static CRT), requires Windows 10+ x64 (ARM64 runs it under emulation).
 
 ## Review log (2026-11-09, review of the other agent's T0.2/T1.2 work + portability audit)
 - T1.2 monitor enumeration (`outputs.rs`, windows-sys): reviewed, unsafe blocks are sound; GetDpiForMonitor needs Windows 8.1+. Fixed: monitors are now sorted primary-first (previously `pick(None)` could choose a secondary monitor while the fullscreen window opens on the primary).
@@ -60,6 +60,10 @@ Claim a task by opening an issue or PR titled with the task id. Keep PRs small.
 
 ## Reported by the maintainer (2026-11-09)
 - "Extend does not work, and iPad aspect ratio is wrong": cause was adopt-only mode (mirrors the one monitor at its own 16:9 size). Fixed by T2.8 (virtual monitor sized to the receiver's panel, so the iPad's ratio is native). Needs confirmation on a real iPad.
+
+## Performance (2026-11-09)
+- **NASM is mandatory for release builds.** Without NASM, openh264-sys2 compiles without its assembly: 1080p encode 57 ms vs 13-20 ms, decode 85 ms vs 8 ms. Cargo does not notice NASM appearing, so a stale cached build stays slow; `windows/build-installer.ps1` therefore runs `cargo clean -p openh264-sys2 --release` and refuses to run without NASM (`winget install NASM.NASM`; GitHub's windows-latest image has it). Any new CI/release job must do the same.
+- Measured on one PC, loopback, release build, 1080p: ~50 fps, encode p50 ~19 ms, decode p50 ~8 ms, capture-to-display p50 ~25 ms (CPU H.264, no GPU). `OD_PROFILE=1` prints per-frame convert/encode times; `cargo test --release -p od-sender --no-default-features -- --ignored --nocapture` runs the encoder micro-benchmarks.
 
 ## Known issues
 - `tests/e2e` `silent_newcomers_leave_a_streaming_sender_alone` is timing-flaky (off by one frame when the machine is busy); it passed on reruns.
@@ -101,3 +105,4 @@ cargo test -p opendisplay-proto -p opendisplay-session -p od-fake-sender
 - 2026-11-09: reviewed the other agent's commits (see Review log), fixed state-dir bug; T3.1 single exe done; v0.2.0 installer built. Heads-up for whoever edits `od-receiver/src/main.rs` (T1.5): it is also compiled into the lib as `cli`; keep it free of `process::exit`.
 - 2026-11-09: T2.3-T2.6 done: Windows sender MVP streams a monitor to a receiver (verified loopback). Open: cursor, release-build perf, T2.7 hardware encode, T2.8 virtual display driver, T2.9 polish, T3.2 GUI.
 - 2026-11-09: GUI (T3.2) and extended display via Virtual Display Driver (T2.8, unverified with the driver) added; installer v0.3.0 has an optional driver install task (winget). The other agent's T1.x work is still in progress (a Copilot session was seen working in the same repo): pull before editing `outputs.rs` / `win_ui.rs`.
+- 2026-11-09: found and fixed a 4x slowdown (OpenH264 built without NASM assembly); v0.3.1 released. Next: verify extended display with the real driver and an iPad (T2.8 TODO list), cursor painting, hardware encode.
