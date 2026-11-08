@@ -1,1 +1,0 @@
-- 2026-11-08: T1.1 done (receiver builds/tests on Windows with --no-default-features; sink none runs). Files use CRLF in Windows checkouts: prefer Edit tool/sed with \r tolerance. No python on dev machine.
