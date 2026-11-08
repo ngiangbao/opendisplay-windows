@@ -1,0 +1,21 @@
+[package]
+name = "opendisplay"
+description = "OpenDisplay for Windows: one executable that is both the receiver (this PC as a display) and the sender (extend this PC onto another device)."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "opendisplay"
+path = "src/main.rs"
+
+# The unified app is Windows-only; on other platforms the crate is an empty
+# stub so `cargo build` of the whole workspace on Linux stays unchanged.
+[target.'cfg(windows)'.dependencies]
+od-receiver = { path = "../od-receiver", default-features = false, features = ["winui"] }
+od-sender = { path = "../od-sender", default-features = false }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }

@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use std::net::SocketAddr;
 use std::time::Duration;
 
@@ -243,13 +244,23 @@ fn power_events() -> tokio::sync::mpsc::UnboundedReceiver<od_receiver::power::Po
 }
 
 fn main() -> Result<()> {
-    tracing_subscriber::fmt()
+    let _ = tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()),
         )
         .with_target(false)
-        .init();
-    let a = Args::parse();
+        .try_init();
+    run_cli(std::env::args_os())
+}
+
+/// Run the receiver CLI; `argv` includes the program name. Also compiled into
+/// the library (`od_receiver::cli`) for the single-exe `opendisplay`.
+pub fn run_cli<I, T>(argv: I) -> Result<()>
+where
+    I: IntoIterator<Item = T>,
+    T: Into<std::ffi::OsString> + Clone,
+{
+    let a = Args::parse_from(argv);
     #[cfg(feature = "winui")]
     if a.sink == SinkKind::Soft {
         return win_main(a);

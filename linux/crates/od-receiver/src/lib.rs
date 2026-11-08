@@ -3,6 +3,11 @@
 //! replaces a live one, §1), an optional UDP cursor port
 //! (§6.3), a Bonjour advertisement (§2.1), and a decode/present pipeline.
 
+// The CLI lives in main.rs and is compiled both as the `od-receiver` binary and
+// as this module, so the single-exe `opendisplay` can run it in-process.
+extern crate self as od_receiver;
+#[path = "main.rs"]
+pub mod cli;
 pub mod discovery;
 #[cfg(feature = "gtk")]
 pub mod gtk_ui;

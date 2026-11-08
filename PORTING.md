@@ -32,7 +32,7 @@ Claim a task by opening an issue or PR titled with the task id. Keep PRs small.
 - [x] **T1.3** (done 2026-11-08) `--sink soft` (feature `winui`, default on Windows): OpenH264 software decode + winit/softbuffer window, `crates/od-receiver/src/win_ui.rs`. Verified end to end with `od-fake-sender` (180 frames, 0 decode errors, ~2.5 ms decode). H.264 only (no HEVC), CPU decode, no GPU path yet. Follow-ups: GPU decode (Media Foundation/D3D11) and HEVC.
 - [x] **T1.4** (done, mouse only) left-button drag -> touch, wheel -> scroll via `input.rs`. TODO: real touchscreen/pen events, cursor overlay from the sender cursor channel.
 - [ ] **T1.5** Power events (`WM_POWERBROADCAST`) in place of logind (`power.rs`).
-- [~] **T1.6** installer done: `windows/build-installer.ps1` builds a static-CRT release and an Inno Setup installer (optional firewall rule). Not yet: code signing, auto-start, tray icon, no console window, CI release workflow.
+- [~] **T1.6** installer done: `windows/build-installer.ps1` builds the single-exe static-CRT release and an Inno Setup installer (`windows/opendisplay.iss`) (optional firewall rule). Not yet: code signing, auto-start, tray icon, no console window, CI release workflow.
 
 ### Phase 2 — Windows sender (extend PC to iPhone/iPad/Android/Mac)
 - [x] **T2.1** (done 2026-11-08) design written: [windows/DESIGN-sender.md](windows/DESIGN-sender.md). Recommendation: MVP adopts an existing monitor (no driver), DXGI Desktop Duplication + OpenH264 + SendInput; IddCx virtual display driver is an optional later step. Revised task list T2.2-T2.9 is in that file (it replaces the T2.2-T2.6 lines below). Open questions for the maintainer are at its end.

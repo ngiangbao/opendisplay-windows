@@ -6,6 +6,7 @@ members = [
     "crates/od-fake-sender",
     "crates/od-receiver",
     "crates/od-sender",
+    "crates/opendisplay",
 ]
 
 [workspace.package]
