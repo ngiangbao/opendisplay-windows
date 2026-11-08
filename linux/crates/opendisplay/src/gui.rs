@@ -270,7 +270,13 @@ impl App {
             .spawn();
         match r {
             Ok(_) => self.log("[extend] installing the virtual display driver (see the console window); press Start when it finishes"),
-            Err(e) => self.log(&format!("[extend] could not run winget: {e}. Install it from github.com/VirtualDrivers/Virtual-Display-Driver/releases")),
+            Err(e) => {
+                self.log(&format!("[extend] could not run winget ({e}); opening the driver's download page instead"));
+                let _ = Command::new("cmd")
+                    .args(["/c", "start", "", "https://github.com/VirtualDrivers/Virtual-Display-Driver/releases"])
+                    .creation_flags(CREATE_NO_WINDOW)
+                    .spawn();
+            }
         }
         self.notice.sender().notice();
     }
