@@ -58,9 +58,10 @@ cargo test -p opendisplay-proto -p opendisplay-session -p od-fake-sender
 - Record decisions and blockers in this file (append to "Log").
 
 ## Current handoff
-- T0.2 is complete: `.github/workflows/windows.yml` runs the three portable
-  crates on `windows-latest`. No task is currently claimed by this agent; T1.2
-  (Windows monitor enumeration/DPI) and T1.3 (presenter) are ready to pick up.
+- **In progress: T1.2** — add native Windows monitor enumeration (device name,
+  physical pixels, refresh rate, and effective DPI scale) to `outputs.rs`.
+  T0.2 is complete: `.github/workflows/windows.yml` continuously tests the
+  portable crates on `windows-latest`.
 
 ## Log
 - 2026-11-08: added `.github/workflows/windows.yml` to run the portable-crate
