@@ -9,7 +9,7 @@
 //! then selects it. This is how the iPad's own resolution is adopted.
 //!
 //! Facts taken from the driver's source (Driver.cpp): pipe
-//! `\.\pipe\MTTVirtualDisplayPipe`, command `RELOAD_DRIVER`, a monitor count of 0
+//! `\\.\pipe\MTTVirtualDisplayPipe`, command `RELOAD_DRIVER`, a monitor count of 0
 //! is treated as 1, global refresh rates apply to every resolution.
 
 use std::io::Write;
@@ -17,7 +17,7 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result, bail};
 
-pub const PIPE: &str = r"\.\pipe\MTTVirtualDisplayPipe";
+pub const PIPE: &str = r"\\.\pipe\MTTVirtualDisplayPipe";
 const DEFAULT_DIR: &str = r"C:\VirtualDisplayDriver";
 
 /// Folder holding `vdd_settings.xml` (override for tests: `OPENDISPLAY_VDD_DIR`).
