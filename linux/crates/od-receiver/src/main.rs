@@ -20,7 +20,7 @@ struct Args {
     #[arg(long)]
     name: Option<String>,
     /// `hello.device` (free-form).
-    #[arg(long, default_value = "Linux")]
+    #[arg(long, default_value = default_device())]
     device: String,
     /// Output (connector name) to describe in `hello` and to fullscreen on.
     /// Default: first.
@@ -197,6 +197,10 @@ async fn serve(
     let port = receiver.local_addr()?.port();
     let host = std::fs::read_to_string("/etc/hostname")
         .map(|s| s.trim().to_string())
+        .ok()
+        .filter(|s| !s.is_empty())
+        .or_else(|| std::env::var("COMPUTERNAME").ok())
+        .or_else(|| std::env::var("HOSTNAME").ok())
         .unwrap_or_default();
     let host = if host.is_empty() {
         "opendisplay".to_string()
@@ -435,4 +439,9 @@ fn win_main(a: Args) -> Result<()> {
     worker
         .join()
         .map_err(|_| anyhow::anyhow!("receiver thread panicked"))?
+}
+
+/// `hello.device` default: the OS the receiver runs on.
+fn default_device() -> &'static str {
+    if cfg!(windows) { "Windows" } else { "Linux" }
 }

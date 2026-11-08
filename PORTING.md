@@ -45,6 +45,12 @@ Claim a task by opening an issue or PR titled with the task id. Keep PRs small.
 ## Release
 Prerelease **v0.1.0-receiver** ships `OpenDisplay-Receiver-Setup-0.1.0.exe` (receiver only; unsigned, so SmartScreen will warn). Rebuild with `windows/build-installer.ps1` (needs Rust, MSVC Build Tools, Inno Setup 6).
 
+## Review log (2026-11-09, review of the other agent's T0.2/T1.2 work + portability audit)
+- T1.2 monitor enumeration (`outputs.rs`, windows-sys): reviewed, unsafe blocks are sound; GetDpiForMonitor needs Windows 8.1+. Fixed: monitors are now sorted primary-first (previously `pick(None)` could choose a secondary monitor while the fullscreen window opens on the primary).
+- CI (`.github/workflows/windows.yml`): fine; action versions exist.
+- Portability bug found and fixed (only showed on the dev machine because Git Bash sets HOME): `id.rs` fell back to `/tmp` when HOME/XDG were unset, which fails for normal users on Windows. Now uses `%LOCALAPPDATA%OpenDisplay`. Hostname now falls back to `COMPUTERNAME`, `hello.device` defaults to "Windows".
+- Rule for everyone: test with `env -u HOME -u XDG_STATE_HOME` (or from cmd.exe) before claiming Windows support; never rely on HOME, /tmp, /etc, /proc.
+
 ## Known issues
 - `tests/e2e` `silent_newcomers_leave_a_streaming_sender_alone` is timing-flaky (off by one frame when the machine is busy); it passed on reruns.
 - Windows sender (Phase 2) is **not started**; it needs a virtual display driver and is the main open work.

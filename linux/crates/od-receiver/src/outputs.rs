@@ -22,6 +22,8 @@ pub struct OutputInfo {
     pub refresh_mhz: i32,
     /// Effective DPI scale relative to 96 DPI.
     pub scale: f64,
+    /// The system's primary output (Windows); false where unknown.
+    pub primary: bool,
 }
 
 impl OutputInfo {
@@ -158,6 +160,9 @@ mod windows {
         if ok == 0 {
             anyhow::bail!("EnumDisplayMonitors failed")
         }
+        // Primary first: `pick(None)` takes the first output, and a borderless
+        // fullscreen window opens on the primary monitor.
+        outputs.sort_by_key(|o: &OutputInfo| !o.primary);
         Ok(outputs)
     }
 
@@ -227,6 +232,7 @@ mod windows {
             height,
             refresh_mhz,
             scale: dpi_x as f64 / DEFAULT_DPI as f64,
+            primary: info.monitorInfo.dwFlags & 1 != 0, // MONITORINFOF_PRIMARY
         })
     }
 
@@ -281,6 +287,7 @@ mod tests {
             height: 720,
             refresh_mhz,
             scale: 1.0,
+            primary: false,
         };
         assert_eq!(o(0).refresh_hz(), None);
         assert_eq!(o(59_940).refresh_hz(), Some(60));
