@@ -449,3 +449,38 @@ fn threads_or_all(t: u16) -> u16 {
         t
     }
 }
+
+/// A monitor the Windows sender can share, for front ends (`opendisplay`'s GUI).
+#[cfg(windows)]
+#[derive(Debug, Clone)]
+pub struct MonitorSummary {
+    /// Device name to pass as `--output`, e.g. `\.\DISPLAY2`.
+    pub name: String,
+    pub width: u32,
+    pub height: u32,
+    pub hz: f64,
+    pub primary: bool,
+}
+
+/// The monitors the Windows sender can adopt, primary first.
+#[cfg(windows)]
+pub fn list_monitors() -> Vec<MonitorSummary> {
+    backend::win::monitors::list()
+        .unwrap_or_default()
+        .into_iter()
+        .map(|m| MonitorSummary {
+            name: m.name,
+            width: m.width,
+            height: m.height,
+            hz: m.hz,
+            primary: m.primary,
+        })
+        .collect()
+}
+
+/// Whether the Virtual Display Driver (needed for an extended screen at the
+/// receiver's resolution) is installed.
+#[cfg(windows)]
+pub fn vdd_installed() -> bool {
+    backend::win::vdd::installed()
+}

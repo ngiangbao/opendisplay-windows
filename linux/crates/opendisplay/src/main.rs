@@ -6,6 +6,12 @@
 //! opendisplay send [options]       extend this PC onto a receiver (--help)
 //! ```
 #![cfg_attr(not(windows), allow(dead_code))]
+// GUI subsystem: double-clicking shows no console window. CLI use re-attaches to
+// the parent terminal (see `attach_console`).
+#![cfg_attr(windows, windows_subsystem = "windows")]
+
+#[cfg(windows)]
+mod gui;
 
 #[cfg(not(windows))]
 fn main() {
@@ -17,14 +23,19 @@ fn main() {
 fn main() {
     use std::ffi::OsString;
 
-    od_sender::init_tracing();
     let mut args = std::env::args_os();
     let _program = args.next();
     let rest: Vec<OsString> = args.collect();
     let first = rest.first().and_then(|a| a.to_str()).unwrap_or("");
+    if first.is_empty() {
+        // Double-click / Start menu: the control panel.
+        gui::run();
+        return;
+    }
+    attach_console();
+    od_sender::init_tracing();
 
     let code = match first {
-        "" => receive(vec!["--windowed".into()]),
         "receive" | "recv" | "display" => receive(rest[1..].to_vec()),
         "send" | "extend" => send(rest[1..].to_vec()),
         "-h" | "--help" | "help" => {
@@ -75,4 +86,38 @@ fn receive(args: Vec<std::ffi::OsString>) -> i32 {
 fn send(args: Vec<std::ffi::OsString>) -> i32 {
     let argv = std::iter::once(std::ffi::OsString::from("opendisplay send")).chain(args);
     od_sender::run_cli(argv)
+}
+
+/// A GUI-subsystem exe has no console. When started from cmd/PowerShell with
+/// arguments, attach to that terminal so `--help`, logs and `doctor` print.
+/// Skipped when stdout/stderr are already valid (a pipe from the control panel).
+#[cfg(windows)]
+fn attach_console() {
+    use std::os::windows::io::AsRawHandle;
+    use windows_sys::Win32::System::Console::{
+        ATTACH_PARENT_PROCESS, AttachConsole, GetStdHandle, STD_ERROR_HANDLE, STD_OUTPUT_HANDLE,
+        SetStdHandle,
+    };
+    // SAFETY: plain console API calls; the leaked File keeps the handle valid.
+    unsafe {
+        let err = GetStdHandle(STD_ERROR_HANDLE);
+        let out = GetStdHandle(STD_OUTPUT_HANDLE);
+        let valid = |h: windows_sys::Win32::Foundation::HANDLE| !h.is_null() && h as isize != -1;
+        if valid(err) && valid(out) {
+            return;
+        }
+        if AttachConsole(ATTACH_PARENT_PROCESS) == 0 {
+            return;
+        }
+        if let Ok(f) = std::fs::OpenOptions::new().write(true).open("CONOUT$") {
+            let h = f.as_raw_handle() as windows_sys::Win32::Foundation::HANDLE;
+            if !valid(out) {
+                SetStdHandle(STD_OUTPUT_HANDLE, h);
+            }
+            if !valid(err) {
+                SetStdHandle(STD_ERROR_HANDLE, h);
+            }
+            std::mem::forget(f);
+        }
+    }
 }

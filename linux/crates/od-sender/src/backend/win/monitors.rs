@@ -120,3 +120,74 @@ pub fn list() -> Result<Vec<Monitor>> {
         Ok(out)
     }
 }
+
+
+/// Whether `device_name` (`\\.\DISPLAYn`) is a Virtual Display Driver monitor
+/// (its EDID manufacturer is "MTT").
+pub fn is_virtual(device_name: &str) -> bool {
+    use windows::Win32::Graphics::Gdi::{DISPLAY_DEVICEW, EnumDisplayDevicesW};
+    let name: Vec<u16> = device_name.encode_utf16().chain(std::iter::once(0)).collect();
+    let mut dd = DISPLAY_DEVICEW {
+        cb: std::mem::size_of::<DISPLAY_DEVICEW>() as u32,
+        ..Default::default()
+    };
+    // SAFETY: `name` is NUL-terminated and `dd` has its size set.
+    let ok = unsafe { EnumDisplayDevicesW(PCWSTR(name.as_ptr()), 0, &mut dd, 0) }.as_bool();
+    ok && {
+        let id = wide(&dd.DeviceID).to_uppercase();
+        let s = wide(&dd.DeviceString).to_lowercase();
+        id.contains("MTT") || s.contains("virtual display")
+    }
+}
+
+/// Set a monitor's mode and (optionally) its top-left position in the virtual
+/// desktop, and apply it now. Windows keeps it for the next session too.
+pub fn set_mode(
+    device_name: &str,
+    width: u32,
+    height: u32,
+    hz: u32,
+    pos: Option<(i32, i32)>,
+) -> Result<()> {
+    use windows::Win32::Graphics::Gdi::{
+        CDS_NORESET, CDS_TYPE, CDS_UPDATEREGISTRY, ChangeDisplaySettingsExW, DISP_CHANGE_SUCCESSFUL,
+        DM_DISPLAYFREQUENCY, DM_PELSHEIGHT, DM_PELSWIDTH, DM_POSITION,
+    };
+    let name: Vec<u16> = device_name.encode_utf16().chain(std::iter::once(0)).collect();
+    // SAFETY: `name` is NUL-terminated; `dm` is initialised by
+    // EnumDisplaySettingsW before it is changed.
+    unsafe {
+        let mut dm = DEVMODEW {
+            dmSize: std::mem::size_of::<DEVMODEW>() as u16,
+            ..Default::default()
+        };
+        if !EnumDisplaySettingsW(PCWSTR(name.as_ptr()), ENUM_CURRENT_SETTINGS, &mut dm).as_bool() {
+            anyhow::bail!("cannot read the current mode of {device_name}");
+        }
+        dm.dmPelsWidth = width;
+        dm.dmPelsHeight = height;
+        dm.dmDisplayFrequency = hz;
+        dm.dmFields = DM_PELSWIDTH | DM_PELSHEIGHT | DM_DISPLAYFREQUENCY;
+        if let Some((x, y)) = pos {
+            dm.Anonymous1.Anonymous2.dmPosition.x = x;
+            dm.Anonymous1.Anonymous2.dmPosition.y = y;
+            dm.dmFields |= DM_POSITION;
+        }
+        let r = ChangeDisplaySettingsExW(
+            PCWSTR(name.as_ptr()),
+            Some(&dm),
+            None,
+            CDS_UPDATEREGISTRY | CDS_NORESET,
+            None,
+        );
+        if r != DISP_CHANGE_SUCCESSFUL {
+            anyhow::bail!("Windows refused {width}x{height}@{hz} on {device_name} (code {})", r.0);
+        }
+        // Apply the batched change.
+        let r = ChangeDisplaySettingsExW(PCWSTR::null(), None, None, CDS_TYPE(0), None);
+        if r != DISP_CHANGE_SUCCESSFUL {
+            anyhow::bail!("Windows could not apply the new mode (code {})", r.0);
+        }
+    }
+    Ok(())
+}

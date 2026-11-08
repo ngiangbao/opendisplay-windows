@@ -19,3 +19,7 @@ od-sender = { path = "../od-sender", default-features = false }
 anyhow = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
+native-windows-gui = { version = "1.0.13", features = ["combobox", "frame", "textbox", "notice", "high-dpi"] }
+native-windows-derive = "1.0.5"
+serde_json = { workspace = true }
+windows-sys = { workspace = true, features = ["Win32_System_Console", "Win32_Foundation"] }

@@ -10,6 +10,7 @@
 mod capture;
 mod input;
 pub mod monitors;
+pub mod vdd;
 
 use anyhow::{Result, bail};
 use tracing::{info, warn};
@@ -40,7 +41,7 @@ impl WindowsBackend {
         if let Some(want) = &self.output {
             return all
                 .iter()
-                .find(|m| m.name.eq_ignore_ascii_case(want))
+                .find(|m| m.name.eq_ignore_ascii_case(want) || m.name.to_ascii_uppercase().ends_with(&want.to_ascii_uppercase()))
                 .cloned()
                 .ok_or_else(|| {
                     anyhow::anyhow!(
@@ -85,8 +86,8 @@ impl Backend for WindowsBackend {
         Caps {
             cursor_metadata: false,
             dmabuf: false,
-            resize_in_place: false,
-            creates_outputs: false,
+            resize_in_place: vdd::installed(),
+            creates_outputs: vdd::installed(),
         }
     }
 
@@ -97,8 +98,8 @@ impl Backend for WindowsBackend {
     }
 
     fn open(&mut self, spec: &DisplaySpec) -> Result<Box<dyn VirtualDisplay>> {
-        let m = self.choose()?;
-        let lock = lock_output(&lock_key(&m.name))?;
+        let (m, virtual_) = self.choose_for(spec)?;
+        let lock = lock_output("windows-sender")?;
         let info = m.display_info();
         if (spec.width, spec.height) != (info.width, info.height) {
             info!(
@@ -110,6 +111,7 @@ impl Backend for WindowsBackend {
         Ok(Box::new(WindowsDisplay {
             monitor: m,
             info,
+            virtual_,
             capture: None,
             _lock: lock,
         }))
@@ -120,16 +122,16 @@ impl Backend for WindowsBackend {
     }
 
     fn lock_name(&self, _: &DisplaySpec) -> String {
-        match self.choose() {
-            Ok(m) => lock_key(&m.name),
-            Err(_) => "windows".into(),
-        }
+        // One sender per Windows machine: two would fight over input and capture.
+        "windows-sender".into()
     }
 }
 
 struct WindowsDisplay {
     monitor: Monitor,
     info: DisplayInfo,
+    /// A Virtual Display Driver monitor we sized to the receiver.
+    virtual_: bool,
     capture: Option<capture::Capture>,
     _lock: super::lock::OutputLock,
 }
@@ -153,6 +155,12 @@ impl VirtualDisplay for WindowsDisplay {
 
     fn reconfigure(&mut self, spec: &DisplaySpec) -> Result<()> {
         self.stop_capture();
+        if self.virtual_ {
+            // Rotation or a new receiver: resize our virtual monitor.
+            self.monitor = prepare_virtual(spec)?;
+            self.info = self.monitor.display_info();
+            return Ok(());
+        }
         // The monitor is not ours to resize; re-read it in case its owner did.
         if let Some(m) = monitors::list()?.into_iter().find(|m| m.name == self.monitor.name) {
             self.monitor = m;
@@ -181,4 +189,65 @@ impl Drop for WindowsDisplay {
     fn drop(&mut self) {
         self.stop_capture();
     }
+}
+
+impl WindowsBackend {
+    /// The monitor to stream and whether it is a virtual one we size to the
+    /// receiver. `--output` always adopts that exact monitor (mirror or a real
+    /// second screen). Otherwise: the Virtual Display Driver if installed
+    /// (extended screen at the receiver's own resolution), else a real second
+    /// screen, else an explanatory error instead of silently mirroring.
+    fn choose_for(&self, spec: &DisplaySpec) -> Result<(Monitor, bool)> {
+        if self.output.is_some() {
+            return Ok((self.choose()?, false));
+        }
+        if vdd::installed() {
+            return Ok((prepare_virtual(spec)?, true));
+        }
+        let all = monitors::list()?;
+        if let Some(m) = all.iter().find(|m| !m.primary) {
+            return Ok((m.clone(), false));
+        }
+        bail!("{}", vdd::not_installed_message())
+    }
+}
+
+/// Make the Virtual Display Driver's monitor exactly the receiver's size and
+/// park it to the right of the other screens.
+fn prepare_virtual(spec: &DisplaySpec) -> Result<Monitor> {
+    use std::time::{Duration, Instant};
+    let (w, h) = (spec.width & !1, spec.height & !1);
+    let hz = vdd::pick_refresh(spec.hz);
+    let find = || -> Result<Option<Monitor>> {
+        Ok(monitors::list()?
+            .into_iter()
+            .find(|m| monitors::is_virtual(&m.name)))
+    };
+    if vdd::ensure_resolution(w, h)? {
+        info!("added {w}x{h} to the virtual display driver; reloading it");
+        vdd::reload()?;
+        std::thread::sleep(Duration::from_millis(1500));
+    }
+    let deadline = Instant::now() + Duration::from_secs(12);
+    let m = loop {
+        match find()? {
+            Some(m) => break m,
+            None if Instant::now() < deadline => std::thread::sleep(Duration::from_millis(300)),
+            None => bail!(
+                "the virtual display did not appear; open Settings > Display and check it is enabled"
+            ),
+        }
+    };
+    if (m.width, m.height) != (w, h) || m.hz.round() as u32 != hz {
+        let others = monitors::list()?;
+        let x = others
+            .iter()
+            .filter(|o| o.name != m.name)
+            .map(|o| o.x + o.width as i32)
+            .max()
+            .unwrap_or(0);
+        monitors::set_mode(&m.name, w, h, hz, Some((x, 0)))?;
+        std::thread::sleep(Duration::from_millis(800));
+    }
+    find()?.ok_or_else(|| anyhow::anyhow!("the virtual display disappeared after the mode change"))
 }
