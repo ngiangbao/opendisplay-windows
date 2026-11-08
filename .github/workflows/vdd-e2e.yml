@@ -44,7 +44,18 @@ jobs:
           $h = (Get-FileHash $f -Algorithm SHA256).Hash.ToLower()
           "sha256: $h"
           if ($h -ne "ca10b85babecfb636c85b3f04d2306968d4f940dd3dd35767f866207bfba846e") { throw "unexpected installer hash" }
-          Start-Process -FilePath $f -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART","/SP-","/LOG=$env:RUNNER_TEMP\vdd-install.log" -Wait
+          $p = Start-Process -FilePath $f -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART","/SP-","/LOG=$env:RUNNER_TEMP\vdd-install.log" -PassThru
+          if (-not $p.WaitForExit(180000)) {
+            "!! installer still running after 180 s: probably waiting for a dialog"
+            Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+            $b = [System.Windows.Forms.SystemInformation]::VirtualScreen
+            $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+            $g = [System.Drawing.Graphics]::FromImage($bmp); $g.CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
+            $bmp.Save("$env:RUNNER_TEMP\hang.png")
+            Get-Process | Where-Object { $_.MainWindowTitle } | Format-Table Id, ProcessName, MainWindowTitle -AutoSize | Out-String
+            Get-CimInstance Win32_Process | Where-Object { $_.ParentProcessId -eq $p.Id } | Select-Object ProcessId, Name, CommandLine | Format-List | Out-String
+            Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+          }
           Start-Sleep -Seconds 8
           "--- install log tail"; Get-Content "$env:RUNNER_TEMP\vdd-install.log" -ErrorAction SilentlyContinue | Select-Object -Last 40
           "--- settings file"; Test-Path C:\VirtualDisplayDriver\vdd_settings.xml
@@ -83,3 +94,12 @@ jobs:
           Start-Process -FilePath $exe -ArgumentList "send doctor" -Wait -NoNewWindow -RedirectStandardOutput $env:RUNNER_TEMP\d2.out -RedirectStandardError $env:RUNNER_TEMP\d2.err
           Get-Content $env:RUNNER_TEMP\d2.out
           "===== vdd_settings.xml resolutions"; Select-String -Path C:\VirtualDisplayDriver\vdd_settings.xml -Pattern "<width>|<height>" | ForEach-Object { $_.Line.Trim() }
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: vdd-diagnostics
+          path: |
+            ${{ runner.temp }}/hang.png
+            ${{ runner.temp }}/vdd-install.log
+          if-no-files-found: ignore
