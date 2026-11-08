@@ -6,6 +6,17 @@ use spare devices as extra monitors, with the same wire protocol
 apps keep working.
 
 > **Status: alpha, one app with a control panel.** `opendisplay.exe` opens a window with two cards: use this PC as a display, or extend this PC onto another device (the extended screen at the other device's own resolution needs the free Virtual Display Driver; not yet verified with a real iPad). See [PORTING.md](PORTING.md).
+
+## Quick start (Windows) / Hướng dẫn nhanh
+
+1. Download `OpenDisplay-Setup-*.exe` from [Releases](https://github.com/ngiangbao/opendisplay-windows/releases) and run it (Windows 10 or later, 64-bit). Windows SmartScreen will warn because the installer is not code-signed: choose *More info → Run anyway*. Tick the firewall option, and the *Virtual Display Driver* option if you want an extended screen.
+   Tải file cài đặt ở mục Releases và chạy (Windows 10 trở lên, 64-bit). SmartScreen sẽ cảnh báo vì chưa ký số: chọn *More info → Run anyway*.
+2. Open **OpenDisplay** from the Start menu. One window, two cards:
+   - **Use this PC as a display** (*Dùng PC này làm màn hình phụ*): press **Start**; on the Mac/Linux sender pick this computer by name.
+   - **Extend this PC onto another screen** (*Mở rộng màn hình PC sang thiết bị khác*): press **Find** to list receivers (iPhone/iPad/Android/Mac/Linux/another Windows PC running OpenDisplay) or type `host:port`, then **Start**. "New extended display" creates a screen with the *exact resolution of the other device* (needs the free Virtual Display Driver, one-time install button inside the app); "Mirror main screen" just copies your screen.
+3. Command line (same exe): `opendisplay receive --help`, `opendisplay send run --to <name|host:port>`, `opendisplay send doctor`.
+
+Status: alpha. The Windows ↔ Windows path is tested; extended display with the real driver and an iPad is **not yet verified**. Contributors and other agents: read [PORTING.md](PORTING.md).
 > (v1.30.2, GPL-3.0). The Windows work lives in the Rust workspace under
 > [`linux/`](linux/), whose crates are mostly platform-neutral.
 
