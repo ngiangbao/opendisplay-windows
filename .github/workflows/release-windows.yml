@@ -1,0 +1,44 @@
+name: Windows installer
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  installer:
+    name: build OpenDisplay installer
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      # NASM is mandatory (OpenH264 is ~4x slower without it); Inno Setup builds the installer.
+      - name: Install NASM and Inno Setup
+        shell: pwsh
+        run: |
+          choco install nasm innosetup -y --no-progress
+          "C:\Program Files\NASM" | Out-File -Append -Encoding ascii $env:GITHUB_PATH
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          $ver = if ($env:GITHUB_REF_TYPE -eq "tag") { $env:GITHUB_REF_NAME.TrimStart("v") -replace "[^0-9.].*$","" } else { "0.0.0" }
+          ./windows/build-installer.ps1 -Version $ver -TargetDir C:\odt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: OpenDisplay-Setup
+          path: windows/output/OpenDisplay-Setup-*.exe
+
+      - name: Attach to the release
+        if: github.ref_type == 'tag'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload $env:GITHUB_REF_NAME (Get-ChildItem windows/output/OpenDisplay-Setup-*.exe).FullName --clobber

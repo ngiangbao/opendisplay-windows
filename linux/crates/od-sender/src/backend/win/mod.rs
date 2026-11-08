@@ -8,6 +8,7 @@
 //! screen). `od-sender doctor` lists them.
 
 mod capture;
+mod cursor;
 mod input;
 pub mod monitors;
 pub mod vdd;
@@ -141,9 +142,9 @@ impl VirtualDisplay for WindowsDisplay {
         &self.info
     }
 
-    fn start_capture(&mut self, _opts: CaptureOptions, sink: FrameSink) -> Result<()> {
+    fn start_capture(&mut self, opts: CaptureOptions, sink: FrameSink) -> Result<()> {
         self.stop_capture();
-        self.capture = Some(capture::Capture::start(self.monitor.clone(), sink)?);
+        self.capture = Some(capture::Capture::start(self.monitor.clone(), sink, opts.cursor)?);
         Ok(())
     }
 

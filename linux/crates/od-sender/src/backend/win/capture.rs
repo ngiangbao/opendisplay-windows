@@ -6,8 +6,9 @@
 //! picture is re-sent about once a second: it keeps the stream alive, lets a
 //! keyframe request be served, and shows a late-joining receiver something.
 //!
-//! The mouse cursor is not part of the duplicated surface and is not painted
-//! yet (follow-up: side channel via GetCursorInfo or painting into frames).
+//! The mouse cursor is not part of the duplicated surface; when the session
+//! asks for it (`CaptureOptions::cursor`) it is painted into each frame by
+//! [`super::cursor`], and a pointer-only update re-sends the last picture.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -29,6 +30,7 @@ use windows::Win32::Graphics::Dxgi::{
 };
 use windows::core::Interface;
 
+use super::cursor::CursorPainter;
 use super::monitors::Monitor;
 use crate::backend::{CaptureEvent, Frame, FrameBuf, FrameSink, PixelFormat};
 
@@ -40,7 +42,7 @@ pub struct Capture {
 impl Capture {
     /// Open the duplication on the calling thread (so errors come back here),
     /// then run the frame loop on a new thread.
-    pub fn start(monitor: Monitor, sink: FrameSink) -> Result<Self> {
+    pub fn start(monitor: Monitor, sink: FrameSink, paint_cursor: bool) -> Result<Self> {
         let dup = Duplication::open(&monitor)?;
         info!(
             "capturing {} {}x{} with Desktop Duplication",
@@ -50,7 +52,7 @@ impl Capture {
         let stop2 = stop.clone();
         let thread = std::thread::Builder::new()
             .name("capture".into())
-            .spawn(move || run(monitor, dup, sink, stop2))
+            .spawn(move || run(monitor, dup, sink, stop2, paint_cursor))
             .context("spawning the capture thread")?;
         Ok(Self {
             stop,
@@ -183,11 +185,21 @@ impl Duplication {
     }
 }
 
-fn run(monitor: Monitor, mut dup: Duplication, mut sink: FrameSink, stop: Arc<AtomicBool>) {
+fn run(
+    monitor: Monitor,
+    mut dup: Duplication,
+    mut sink: FrameSink,
+    stop: Arc<AtomicBool>,
+    paint_cursor: bool,
+) {
+    let mut painter = CursorPainter::default();
     let mut last: Option<Vec<u8>> = None;
     let mut last_sent = Instant::now();
     let mut lost_since: Option<Instant> = None;
-    let send = |sink: &mut FrameSink, pixels: Vec<u8>, w: u32, h: u32| {
+    let mut send = |sink: &mut FrameSink, mut pixels: Vec<u8>, w: u32, h: u32| {
+        if paint_cursor {
+            painter.paint(&mut pixels, w as usize, h as usize, monitor.x, monitor.y);
+        }
         sink(CaptureEvent::Frame(Frame {
             captured_at: Instant::now(),
             presentation_ns: None,
@@ -208,6 +220,7 @@ fn run(monitor: Monitor, mut dup: Duplication, mut sink: FrameSink, stop: Arc<At
         match r {
             Ok(()) => {
                 lost_since = None;
+                let mouse_only = paint_cursor && info.LastPresentTime == 0 && info.LastMouseUpdateTime != 0;
                 let frame = match res.as_ref() {
                     Some(res) if info.LastPresentTime != 0 => Some(dup.read(res)),
                     _ => None,
@@ -223,6 +236,12 @@ fn run(monitor: Monitor, mut dup: Duplication, mut sink: FrameSink, stop: Arc<At
                     Some(Err(e)) => {
                         sink(CaptureEvent::Ended(format!("reading the frame: {e:#}")));
                         return;
+                    }
+                    None if mouse_only => {
+                        if let Some(px) = &last {
+                            last_sent = Instant::now();
+                            send(&mut sink, px.clone(), dup.width, dup.height);
+                        }
                     }
                     None => {}
                 }
