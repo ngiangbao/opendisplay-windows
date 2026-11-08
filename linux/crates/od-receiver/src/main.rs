@@ -240,6 +240,8 @@ fn power_events() -> tokio::sync::mpsc::UnboundedReceiver<od_receiver::power::Po
     let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
     #[cfg(feature = "logind")]
     od_receiver::power::watch_logind(tx);
+    #[cfg(windows)]
+    od_receiver::power::watch_windows(tx);
     rx
 }
 

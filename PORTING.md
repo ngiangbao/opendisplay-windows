@@ -31,7 +31,7 @@ Claim a task by opening an issue or PR titled with the task id. Keep PRs small.
 - [x] **T1.2** (done 2026-11-08) Windows `outputs.rs` enumerates active monitors with Win32, including device name, physical pixels, refresh rate, and effective DPI scale; `--output` selects the panel values announced to the sender.
 - [x] **T1.3** (done 2026-11-08) `--sink soft` (feature `winui`, default on Windows): OpenH264 software decode + winit/softbuffer window, `crates/od-receiver/src/win_ui.rs`. Verified end to end with `od-fake-sender` (180 frames, 0 decode errors, ~2.5 ms decode). H.264 only (no HEVC), CPU decode, no GPU path yet. Follow-ups: GPU decode (Media Foundation/D3D11) and HEVC.
 - [x] **T1.4** (done, mouse only) left-button drag -> touch, wheel -> scroll via `input.rs`. TODO: real touchscreen/pen events, cursor overlay from the sender cursor channel.
-- [ ] **T1.5** Power events (`WM_POWERBROADCAST`) in place of logind (`power.rs`).
+- [x] **T1.5** (done 2026-11-09, by the maintainer's session after the other agents stopped) `power::watch_windows` uses `RegisterSuspendResumeNotification` with a callback (no window needed): on PBT_APMSUSPEND it sends `PowerEvent::Sleeping`, holding the suspend up to 1.5 s while `sleeping` reaches the sender. Unit-tested by calling the handler; registration verified at runtime ("watching Windows power events for sleep"). A real suspend was not tried.
 - [~] **T1.6** installer done: `windows/build-installer.ps1` builds the single-exe static-CRT release and an Inno Setup installer (`windows/opendisplay.iss`) (optional firewall rule). Not yet: code signing, auto-start, tray icon, no console window, CI release workflow.
 
 ### Phase 3 — one app
@@ -94,9 +94,7 @@ cargo test -p opendisplay-proto -p opendisplay-session -p od-fake-sender
 - Record decisions and blockers in this file (append to "Log").
 
 ## Current handoff
-- **In progress: T1.5** — route Windows `WM_POWERBROADCAST` suspend events from
-  the winit window into the receiver's existing `PowerEvent::Sleeping` channel.
-  T2.2 is complete; T2.3 remains unclaimed.
+The other agents (CI/T1.2 and the T1.5 claimant) have stopped; everything was taken over by the maintainer's session and the tasks above are done. Open work: verify extended display on a real iPad (T2.8 list), hardware encode (T2.7), receiver touch/pen input (T1.4 follow-up), code signing, tray icon (T3.2).
 
 ## Log
 - 2026-11-08: T1.2 done. Native smoke detected `\\.\DISPLAY1` at 1920x1080,
@@ -118,3 +116,4 @@ cargo test -p opendisplay-proto -p opendisplay-session -p od-fake-sender
 - 2026-11-09: disabled the upstream GitHub Actions workflows that came with the import (Arch PKGBUILD bump, Linux release, Linux, Pages, PR title, Release, Tests: macOS/Linux jobs and release-please that only fail or spam here). Files are untouched; re-enable per workflow in the Actions tab or with `gh workflow enable`. Active: `Windows` (tests) and `Windows installer`. Also relaxed a flaky frame-count assertion in `od-receiver/tests/e2e.rs` (off by one frame on slow runners).
 - 2026-11-09: extended display verified end to end on a throwaway VM; install flow switched from winget (wrong package) to the pinned setup exe + hash; v0.4.0.
 - 2026-11-09: virtual screen is detached after each session and re-attached on the next (verified on the throwaway VM); graceful stop from the control panel; fixed an exit-immediately regression found by the e2e; v0.4.1.
+- 2026-11-09: agents stopped; T1.5 (Windows suspend -> sleeping) implemented and unit-tested.
