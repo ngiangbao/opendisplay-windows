@@ -66,6 +66,7 @@ Claim a task by opening an issue or PR titled with the task id. Keep PRs small.
 - Measured on one PC, loopback, release build, 1080p: ~50 fps, encode p50 ~19 ms, decode p50 ~8 ms, capture-to-display p50 ~25 ms (CPU H.264, no GPU). Encoder micro-benchmark at an iPad-size panel (2360x1640, every frame different): ~22 ms/frame with the current ScreenContent setting (~45 fps), so hardware encode (T2.7) is not urgent. `OD_PROFILE=1` prints per-frame convert/encode times; `cargo test --release -p od-sender --no-default-features -- --ignored --nocapture` runs the encoder micro-benchmarks.
 
 ## Known issues
+- `opendisplay.exe` is a GUI-subsystem program (no console flash on double-click). Run from cmd/PowerShell it attaches to the terminal and prints, but the shell does not wait for it: the prompt can return first, and `& exe --version` captured in a script may be empty. Use `Start-Process -Wait -NoNewWindow` or `cmd /c "opendisplay.exe ... | more"` in scripts. A console-subsystem shim (`opendisplay.com`) would fix it but means a second file, which the maintainer did not want.
 - `tests/e2e` `silent_newcomers_leave_a_streaming_sender_alone` is timing-flaky (off by one frame when the machine is busy); it passed on reruns.
 - Windows sender (Phase 2) is **not started**; it needs a virtual display driver and is the main open work.
 - Never run the installer/firewall steps on someone else machine without telling them.

@@ -39,8 +39,11 @@ jobs:
           Start-Process -FilePath $setup -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART","/TASKS=","/LOG=$env:RUNNER_TEMP\install.log" -Wait
           $exe = "C:\Program Files\OpenDisplay\opendisplay.exe"
           if (-not (Test-Path $exe)) { Get-Content "$env:RUNNER_TEMP\install.log" -ErrorAction SilentlyContinue | Select-Object -Last 30; throw "installer did not install $exe" }
-          "version: " + (& $exe --version)
-          & $exe send doctor
+          # The exe is a GUI-subsystem program, so wait for it explicitly and capture its output.
+          foreach ($a in @("--version", "send doctor")) {
+            Start-Process -FilePath $exe -ArgumentList $a -Wait -NoNewWindow -RedirectStandardOutput "$env:RUNNER_TEMPi.out" -RedirectStandardError "$env:RUNNER_TEMPi.err"
+            "== opendisplay $a"; Get-Content "$env:RUNNER_TEMPi.out","$env:RUNNER_TEMPi.err"
+          }
           # The receiver must start with no HOME/XDG variables (as on a normal PC) and answer a protocol probe.
           $env:HOME = $null
           $p = Start-Process -FilePath $exe -ArgumentList "receive","--sink","none","--width","1280","--height","720","--no-mdns" -PassThru -RedirectStandardError "$env:RUNNER_TEMP\rx.err" -RedirectStandardOutput "$env:RUNNER_TEMP\rx.out"
