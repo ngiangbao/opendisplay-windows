@@ -19,6 +19,8 @@ pub mod kde;
 pub mod lock;
 #[cfg(target_os = "linux")]
 pub mod wlroots;
+#[cfg(windows)]
+pub mod win;
 
 use std::fmt;
 use std::str::FromStr;

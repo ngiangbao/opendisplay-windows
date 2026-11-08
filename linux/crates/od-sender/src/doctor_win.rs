@@ -8,7 +8,24 @@ use crate::{config, encoder};
 /// Returns whether `run` could work here (false until a backend exists).
 pub fn doctor(_req: &Request, config_path: Option<&Path>) -> bool {
     println!("platform: windows");
-    println!("backend:  none yet (task T2.3, see windows/DESIGN-sender.md)");
+    #[cfg(windows)]
+    {
+        println!("backend:  windows monitor adoption (Desktop Duplication + SendInput)");
+        match crate::backend::win::monitors::list() {
+            Ok(list) => {
+                for m in list {
+                    println!(
+                        "monitor:  {}  {}x{} at {},{}  {:.0} Hz  scale {}{}",
+                        m.name, m.width, m.height, m.x, m.y, m.hz, m.scale,
+                        if m.primary { "  (primary)" } else { "" }
+                    );
+                }
+            }
+            Err(e) => println!("monitor:  could not list monitors: {e:#}"),
+        }
+    }
+    #[cfg(not(windows))]
+    println!("backend:  none for this platform");
     let path = config_path.map(Path::to_path_buf).or_else(config::default_path);
     match path {
         Some(p) => println!("config:   {} ({})", p.display(), if p.exists() { "found" } else { "absent" }),
@@ -24,5 +41,5 @@ pub fn doctor(_req: &Request, config_path: Option<&Path>) -> bool {
         Ok(_) => println!("encoder:  OpenH264 opens"),
         Err(e) => println!("encoder:  OpenH264 failed: {e:#}"),
     }
-    false
+    cfg!(windows)
 }

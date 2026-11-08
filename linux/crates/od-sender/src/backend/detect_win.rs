@@ -1,6 +1,5 @@
-//! Windows stand-in for `detect.rs`: no backend exists yet (T2.3 adds the
-//! first one, see windows/DESIGN-sender.md), so every request is refused with
-//! the "unsupported" exit code and a pointer to the task.
+//! Non-Linux stand-in for `detect.rs`. On Windows it builds the monitor-adopting
+//! backend (design: windows/DESIGN-sender.md); elsewhere it refuses.
 
 use anyhow::Result;
 
@@ -33,10 +32,21 @@ impl std::fmt::Display for Unsupported {
 
 impl std::error::Error for Unsupported {}
 
-/// Always refuses until the Windows backend lands.
+/// Windows: adopt a monitor (`--output \.\DISPLAY2`, else the first non-primary).
+#[cfg(windows)]
+pub fn detect(req: &Request) -> Result<Box<dyn Backend>> {
+    if let Some(b) = req.backend {
+        if b != BackendId::Adopt {
+            return Err(Unsupported(format!(
+                "backend {b} does not exist on Windows; only the monitor-adopting backend does"
+            ))
+            .into());
+        }
+    }
+    Ok(Box::new(super::win::WindowsBackend::new(req.output.clone())))
+}
+
+#[cfg(not(windows))]
 pub fn detect(_req: &Request) -> Result<Box<dyn Backend>> {
-    Err(Unsupported(format!(
-        "the Windows sender has no display backend yet (task T2.3); see {ISSUE}"
-    ))
-    .into())
+    Err(Unsupported(format!("no display backend for this platform; see {ISSUE}")).into())
 }
