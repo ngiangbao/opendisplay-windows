@@ -555,6 +555,9 @@ fn shutdown_signal() -> Result<watch::Receiver<bool>> {
     // our stdin (it sets OPENDISPLAY_STOP_ON_STDIN_EOF), so the virtual
     // display is detached in order instead of the process being killed.
     let (stop_tx, mut stop_rx) = tokio::sync::mpsc::unbounded_channel::<()>();
+    // Keep a sender alive in the task below: without the env var nobody sends,
+    // and a closed channel would make `recv()` return at once (a stop request).
+    let keepalive = stop_tx.clone();
     if std::env::var_os("OPENDISPLAY_STOP_ON_STDIN_EOF").is_some() {
         std::thread::spawn(move || {
             let mut sink = Vec::new();
@@ -563,6 +566,7 @@ fn shutdown_signal() -> Result<watch::Receiver<bool>> {
         });
     }
     tokio::spawn(async move {
+        let _keepalive = keepalive;
         let name = tokio::select! {
             _ = c.recv() => "Ctrl+C",
             _ = brk.recv() => "Ctrl+Break",
