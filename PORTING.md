@@ -66,10 +66,9 @@ cargo test -p opendisplay-proto -p opendisplay-session -p od-fake-sender
 - Record decisions and blockers in this file (append to "Log").
 
 ## Current handoff
-- T1.2, T1.3, T1.4 mouse input, and the T2.1 design are complete; no task is
-  currently claimed by this agent. Next: T1.5 power events or T2.2 (make
-  `od-sender` compile on Windows). Receiver follow-ups also include touch/pen,
-  GPU/HEVC decode, and the remaining T1.6 packaging items.
+- **In progress: T1.5** — route Windows `WM_POWERBROADCAST` suspend events from
+  the winit window into the receiver's existing `PowerEvent::Sleeping` channel.
+  T2.2 is complete; T2.3 remains unclaimed.
 
 ## Log
 - 2026-11-08: T1.2 done. Native smoke detected `\\.\DISPLAY1` at 1920x1080,
