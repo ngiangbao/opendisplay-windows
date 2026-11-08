@@ -17,8 +17,6 @@ apps keep working.
 3. Command line (same exe): `opendisplay receive --help`, `opendisplay send run --to <name|host:port>`, `opendisplay send doctor`.
 
 Status: alpha. The Windows ↔ Windows path is tested; extended display with the real driver and an iPad is **not yet verified**. Contributors and other agents: read [PORTING.md](PORTING.md).
-> (v1.30.2, GPL-3.0). The Windows work lives in the Rust workspace under
-> [`linux/`](linux/), whose crates are mostly platform-neutral.
 
 ## Goals
 
