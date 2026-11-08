@@ -5,7 +5,7 @@ use spare devices as extra monitors, with the same wire protocol
 ([PROTOCOL.md](PROTOCOL.md)) so existing iPhone / iPad / Android / Mac / Linux
 apps keep working.
 
-> **Status: alpha, one app.** `opendisplay.exe` is both the receiver (this PC as a display for a Mac/Linux sender) and the sender CLI (extend this PC; the display backend is still being written). Installer in Releases. See [PORTING.md](PORTING.md).
+> **Status: alpha, one app with a control panel.** `opendisplay.exe` opens a window with two cards: use this PC as a display, or extend this PC onto another device (the extended screen at the other device's own resolution needs the free Virtual Display Driver; not yet verified with a real iPad). See [PORTING.md](PORTING.md).
 > (v1.30.2, GPL-3.0). The Windows work lives in the Rust workspace under
 > [`linux/`](linux/), whose crates are mostly platform-neutral.
 

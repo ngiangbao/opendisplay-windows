@@ -36,7 +36,7 @@ Claim a task by opening an issue or PR titled with the task id. Keep PRs small.
 
 ### Phase 3 — one app
 - [x] **T3.1** (done 2026-11-09) single exe: new crate `linux/crates/opendisplay` (Windows-only, empty stub elsewhere) calls `od_receiver::cli::run_cli` and `od_sender::run_cli` in-process. How: `od-sender` is now lib + thin bin (`src/lib.rs` holds the old main.rs); `od-receiver` compiles its `main.rs` twice, as the bin and as `pub mod cli` in the lib (`#[path = "main.rs"]` + `extern crate self as od_receiver;`), so keep `run_cli` and avoid `std::process::exit` inside it.
-- [ ] **T3.2** a real front end for the single exe: tray icon or small window with "Use this PC as a display" and "Extend this PC" toggles, both able to run at the same time (receiver owns the main thread, sender on a worker thread with its own tokio runtime), no console window (`windows_subsystem`), app icon.
+- [~] **T3.2** (done 2026-11-09, first version) control panel GUI: native-windows-gui window with two cards (use this PC as a display / extend this PC) that can run together, live activity log, found-receivers list, driver install button. Design: [windows/DESIGN-gui.md](windows/DESIGN-gui.md). Verified: window opens, Start launches the child `opendisplay receive`, status reads "waiting for a sender". Not done: tray icon, autostart, translations, app icon.
 - [ ] **T3.3** Installer/runtime smoke test on a clean Windows VM or Windows Sandbox (not done yet; only checked with a scrubbed environment on the dev machine).
 
 ### Phase 2 — Windows sender (extend PC to iPhone/iPad/Android/Mac)
@@ -55,6 +55,9 @@ Claim a task by opening an issue or PR titled with the task id. Keep PRs small.
 - CI (`.github/workflows/windows.yml`): fine; action versions exist.
 - Portability bug found and fixed (only showed on the dev machine because Git Bash sets HOME): `id.rs` fell back to `/tmp` when HOME/XDG were unset, which fails for normal users on Windows. Now uses `%LOCALAPPDATA%OpenDisplay`. Hostname now falls back to `COMPUTERNAME`, `hello.device` defaults to "Windows".
 - Rule for everyone: test with `env -u HOME -u XDG_STATE_HOME` (or from cmd.exe) before claiming Windows support; never rely on HOME, /tmp, /etc, /proc.
+
+## Reported by the maintainer (2026-11-09)
+- "Extend does not work, and iPad aspect ratio is wrong": cause was adopt-only mode (mirrors the one monitor at its own 16:9 size). Fixed by T2.8 (virtual monitor sized to the receiver's panel, so the iPad's ratio is native). Needs confirmation on a real iPad.
 
 ## Known issues
 - `tests/e2e` `silent_newcomers_leave_a_streaming_sender_alone` is timing-flaky (off by one frame when the machine is busy); it passed on reruns.
@@ -95,3 +98,4 @@ cargo test -p opendisplay-proto -p opendisplay-session -p od-fake-sender
 - 2026-11-09: T2.2 done (od-sender compiles + tests on Windows, CI step added). `od-sender doctor` runs and reports no backend; `run` exits 2 with a pointer to T2.3. Next unclaimed: T2.3.
 - 2026-11-09: reviewed the other agent's commits (see Review log), fixed state-dir bug; T3.1 single exe done; v0.2.0 installer built. Heads-up for whoever edits `od-receiver/src/main.rs` (T1.5): it is also compiled into the lib as `cli`; keep it free of `process::exit`.
 - 2026-11-09: T2.3-T2.6 done: Windows sender MVP streams a monitor to a receiver (verified loopback). Open: cursor, release-build perf, T2.7 hardware encode, T2.8 virtual display driver, T2.9 polish, T3.2 GUI.
+- 2026-11-09: GUI (T3.2) and extended display via Virtual Display Driver (T2.8, unverified with the driver) added; installer v0.3.0 has an optional driver install task (winget). The other agent's T1.x work is still in progress (a Copilot session was seen working in the same repo): pull before editing `outputs.rs` / `win_ui.rs`.
