@@ -28,62 +28,54 @@ jobs:
         working-directory: linux
         run: cargo build --release -p opendisplay
 
-      - name: Certificate stores before
-        shell: pwsh
-        run: |
-          Get-ChildItem Cert:\LocalMachine\Root, Cert:\LocalMachine\TrustedPublisher | Select-Object -ExpandProperty Thumbprint | Sort-Object | Out-File $env:RUNNER_TEMP\certs-before.txt
-
       - name: Install Virtual Display Driver 25.5.2 (pinned, hash-checked)
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          Get-ChildItem Cert:\LocalMachine\Root, Cert:\LocalMachine\TrustedPublisher | Select-Object -ExpandProperty Thumbprint | Sort-Object | Out-File $env:RUNNER_TEMP\certs-before.txt
           $dir = Join-Path $env:RUNNER_TEMP "vdd"; New-Item -ItemType Directory -Force $dir | Out-Null
           gh release download 25.5.2 --repo VirtualDrivers/Virtual-Display-Driver -p "Virtual.Display.Driver-v25.05.03-setup-x64.exe" -D $dir
           $f = Join-Path $dir "Virtual.Display.Driver-v25.05.03-setup-x64.exe"
           $h = (Get-FileHash $f -Algorithm SHA256).Hash.ToLower()
           "sha256: $h"
           if ($h -ne "ca10b85babecfb636c85b3f04d2306968d4f940dd3dd35767f866207bfba846e") { throw "unexpected installer hash" }
-          # The driver is signed (publisher: SignPath Foundation) but Windows still asks a human to
-          # confirm "Would you like to install this device software?". On this throwaway VM, click Install.
-          $approver = Start-Job -ScriptBlock {
-            Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes
-            $end = (Get-Date).AddSeconds(280)
-            while ((Get-Date) -lt $end) {
+
+          # The driver is signed (publisher: SignPath Foundation) but Windows still asks a human:
+          # "Would you like to install this device software?". On this throwaway VM we click Install.
+          Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes
+          $p = Start-Process -FilePath $f -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART","/SP-","/LOG=$env:RUNNER_TEMP\vdd-install.log" -PassThru
+          $clicked = 0
+          $deadline = (Get-Date).AddSeconds(240)
+          while (-not $p.HasExited -and (Get-Date) -lt $deadline) {
+            try {
               $root = [System.Windows.Automation.AutomationElement]::RootElement
               $w = $root.FindFirst([System.Windows.Automation.TreeScope]::Children, (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty, "Windows Security")))
               if ($w) {
                 $btn = $w.FindFirst([System.Windows.Automation.TreeScope]::Descendants, (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty, "Install")))
-                if ($btn) { $btn.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke(); "clicked Install at " + (Get-Date); Start-Sleep -Seconds 4 }
+                if ($btn) { $btn.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke(); $clicked++; "clicked Install ($clicked) at " + (Get-Date -Format o); Start-Sleep -Seconds 3 }
               }
-              Start-Sleep -Milliseconds 700
-            }
+            } catch { "ui automation: $_" }
+            Start-Sleep -Milliseconds 500
           }
-          $p = Start-Process -FilePath $f -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART","/SP-","/LOG=$env:RUNNER_TEMP\vdd-install.log" -PassThru
-          if (-not $p.WaitForExit(300000)) {
-            "!! installer still running after 300 s: probably waiting for a dialog"
+          if (-not $p.HasExited) {
+            "!! installer still running after 240 s"
             Add-Type -AssemblyName System.Windows.Forms, System.Drawing
             $b = [System.Windows.Forms.SystemInformation]::VirtualScreen
             $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
             $g = [System.Drawing.Graphics]::FromImage($bmp); $g.CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
             $bmp.Save("$env:RUNNER_TEMP\hang.png")
-            Get-Process | Where-Object { $_.MainWindowTitle } | Format-Table Id, ProcessName, MainWindowTitle -AutoSize | Out-String
-            Get-CimInstance Win32_Process | Where-Object { $_.ParentProcessId -eq $p.Id } | Select-Object ProcessId, Name, CommandLine | Format-List | Out-String
             Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
           }
-          Start-Sleep -Seconds 8
-          "--- install log tail"; Get-Content "$env:RUNNER_TEMP\vdd-install.log" -ErrorAction SilentlyContinue | Select-Object -Last 40
+          Start-Sleep -Seconds 10
+          "--- install log (last lines)"; Get-Content "$env:RUNNER_TEMP\vdd-install.log" -ErrorAction SilentlyContinue | Select-Object -Last 12
           "--- settings file"; Test-Path C:\VirtualDisplayDriver\vdd_settings.xml
-          "--- pnp devices"; Get-PnpDevice -PresentOnly -ErrorAction SilentlyContinue | Where-Object { $_.FriendlyName -match "Virtual|MTT|Indirect" -or $_.InstanceId -match "MTT" } | Format-Table Class, FriendlyName, Status -AutoSize | Out-String
+          "--- display adapters"; Get-PnpDevice -Class Display -ErrorAction SilentlyContinue | Format-Table FriendlyName, Status, InstanceId -AutoSize | Out-String -Width 200
           "--- pipe"; [System.IO.Directory]::GetFiles("\\.\pipe\") | Where-Object { $_ -match "MTT" }
-
-      - name: Certificate stores after (did the installer add certificates?)
-        shell: pwsh
-        run: |
           Get-ChildItem Cert:\LocalMachine\Root, Cert:\LocalMachine\TrustedPublisher | Select-Object -ExpandProperty Thumbprint | Sort-Object | Out-File $env:RUNNER_TEMP\certs-after.txt
           $new = Compare-Object (Get-Content $env:RUNNER_TEMP\certs-before.txt) (Get-Content $env:RUNNER_TEMP\certs-after.txt) | Where-Object SideIndicator -eq "=>"
           "new certificates: " + @($new).Count
-          foreach ($n in $new) { Get-ChildItem Cert:\LocalMachine\Root, Cert:\LocalMachine\TrustedPublisher | Where-Object Thumbprint -eq $n.InputObject | Format-List Subject, Issuer, Thumbprint, NotAfter, PSParentPath }
+          foreach ($n in $new) { Get-ChildItem Cert:\LocalMachine\Root, Cert:\LocalMachine\TrustedPublisher | Where-Object Thumbprint -eq $n.InputObject | Format-List Subject, NotAfter, PSParentPath | Out-String }
 
       - name: Doctor (monitors with the driver present)
         shell: pwsh
@@ -97,10 +89,11 @@ jobs:
         continue-on-error: true
         run: |
           $exe = (Resolve-Path linux\target\release\opendisplay.exe).Path
-          $env:RUST_LOG = "debug"
+          $env:RUST_BACKTRACE = "1"
           $rx = Start-Process -FilePath $exe -ArgumentList "receive","--sink","none","--width","2360","--height","1640","--scale","2","--no-mdns" -PassThru -RedirectStandardOutput $env:RUNNER_TEMP\rx.out -RedirectStandardError $env:RUNNER_TEMP\rx.err
           Start-Sleep -Seconds 3
-          Start-Process -FilePath $exe -ArgumentList "send","run","--to","127.0.0.1:9000","--duration","20","--no-reconnect" -Wait -NoNewWindow -RedirectStandardOutput $env:RUNNER_TEMP\tx.out -RedirectStandardError $env:RUNNER_TEMP\tx.err
+          $tx = Start-Process -FilePath $exe -ArgumentList "send","run","--to","127.0.0.1:9000","--duration","20","--no-reconnect" -Wait -PassThru -NoNewWindow -RedirectStandardOutput $env:RUNNER_TEMP\tx.out -RedirectStandardError $env:RUNNER_TEMP\tx.err
+          "sender exit code: $($tx.ExitCode)"
           Start-Sleep -Seconds 2
           Stop-Process $rx -Force -ErrorAction SilentlyContinue
           "===== sender"; Get-Content $env:RUNNER_TEMP\tx.out, $env:RUNNER_TEMP\tx.err | Where-Object { $_ -notmatch "OpenH264\]" } | Select-Object -First 80
@@ -108,7 +101,7 @@ jobs:
           "===== monitors after"
           Start-Process -FilePath $exe -ArgumentList "send doctor" -Wait -NoNewWindow -RedirectStandardOutput $env:RUNNER_TEMP\d2.out -RedirectStandardError $env:RUNNER_TEMP\d2.err
           Get-Content $env:RUNNER_TEMP\d2.out
-          "===== vdd_settings.xml resolutions"; Select-String -Path C:\VirtualDisplayDriver\vdd_settings.xml -Pattern "<width>|<height>" | ForEach-Object { $_.Line.Trim() }
+          "===== vdd_settings.xml resolutions"; Select-String -Path C:\VirtualDisplayDriver\vdd_settings.xml -Pattern "<width>|<height>" -ErrorAction SilentlyContinue | ForEach-Object { $_.Line.Trim() }
 
       - uses: actions/upload-artifact@v4
         if: always()
