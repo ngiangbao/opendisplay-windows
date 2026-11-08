@@ -31,6 +31,28 @@ jobs:
           $ver = if ($env:GITHUB_REF_TYPE -eq "tag") { $env:GITHUB_REF_NAME.TrimStart("v") -replace "[^0-9.].*$","" } else { "0.0.0" }
           ./windows/build-installer.ps1 -Version $ver -TargetDir C:\odt
 
+      # Clean-machine check: install silently (no optional tasks), run the installed exe, uninstall.
+      - name: Smoke test the installer
+        shell: pwsh
+        run: |
+          $setup = (Get-ChildItem windows/output/OpenDisplay-Setup-*.exe).FullName
+          Start-Process -FilePath $setup -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART","/TASKS=","/LOG=$env:RUNNER_TEMP\install.log" -Wait
+          $exe = "C:\Program Files\OpenDisplay\opendisplay.exe"
+          if (-not (Test-Path $exe)) { Get-Content "$env:RUNNER_TEMP\install.log" -ErrorAction SilentlyContinue | Select-Object -Last 30; throw "installer did not install $exe" }
+          "version: " + (& $exe --version)
+          & $exe send doctor
+          # The receiver must start with no HOME/XDG variables (as on a normal PC) and answer a protocol probe.
+          $env:HOME = $null
+          $p = Start-Process -FilePath $exe -ArgumentList "receive","--sink","none","--width","1280","--height","720","--no-mdns" -PassThru -RedirectStandardError "$env:RUNNER_TEMP\rx.err" -RedirectStandardOutput "$env:RUNNER_TEMP\rx.out"
+          Start-Sleep -Seconds 4
+          $listening = (Get-NetTCPConnection -State Listen -LocalPort 9000 -ErrorAction SilentlyContinue) -ne $null
+          Stop-Process $p -Force
+          Get-Content "$env:RUNNER_TEMP\rx.out","$env:RUNNER_TEMP\rx.err" -ErrorAction SilentlyContinue
+          if (-not $listening) { throw "receiver is not listening on 9000" }
+          $unins = Get-ChildItem "C:\Program Files\OpenDisplay\unins*.exe" | Select-Object -First 1
+          Start-Process -FilePath $unins.FullName -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART" -Wait
+          if (Test-Path $exe) { throw "uninstall left the exe behind" }
+
       - uses: actions/upload-artifact@v4
         with:
           name: OpenDisplay-Setup
