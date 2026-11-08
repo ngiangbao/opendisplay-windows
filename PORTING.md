@@ -63,7 +63,7 @@ Claim a task by opening an issue or PR titled with the task id. Keep PRs small.
 
 ## Performance (2026-11-09)
 - **NASM is mandatory for release builds.** Without NASM, openh264-sys2 compiles without its assembly: 1080p encode 57 ms vs 13-20 ms, decode 85 ms vs 8 ms. Cargo does not notice NASM appearing, so a stale cached build stays slow; `windows/build-installer.ps1` therefore runs `cargo clean -p openh264-sys2 --release` and refuses to run without NASM (`winget install NASM.NASM`; GitHub's windows-latest image has it). Any new CI/release job must do the same.
-- Measured on one PC, loopback, release build, 1080p: ~50 fps, encode p50 ~19 ms, decode p50 ~8 ms, capture-to-display p50 ~25 ms (CPU H.264, no GPU). `OD_PROFILE=1` prints per-frame convert/encode times; `cargo test --release -p od-sender --no-default-features -- --ignored --nocapture` runs the encoder micro-benchmarks.
+- Measured on one PC, loopback, release build, 1080p: ~50 fps, encode p50 ~19 ms, decode p50 ~8 ms, capture-to-display p50 ~25 ms (CPU H.264, no GPU). Encoder micro-benchmark at an iPad-size panel (2360x1640, every frame different): ~22 ms/frame with the current ScreenContent setting (~45 fps), so hardware encode (T2.7) is not urgent. `OD_PROFILE=1` prints per-frame convert/encode times; `cargo test --release -p od-sender --no-default-features -- --ignored --nocapture` runs the encoder micro-benchmarks.
 
 ## Known issues
 - `tests/e2e` `silent_newcomers_leave_a_streaming_sender_alone` is timing-flaky (off by one frame when the machine is busy); it passed on reruns.

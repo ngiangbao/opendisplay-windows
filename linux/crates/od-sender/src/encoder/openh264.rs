@@ -270,7 +270,7 @@ mod bench3 {
     #[test]
     #[ignore]
     fn motion_usage_types_1080p() {
-        let (w, h) = (1920usize, 1080usize);
+        let (w, h) = (2360usize, 1640usize); // iPad Air/Pro 11" panel
         let frames: Vec<YUVBuffer> = (0..8)
             .map(|k| {
                 let mut px = vec![200u8; w * h * 4];
