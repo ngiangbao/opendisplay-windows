@@ -24,7 +24,7 @@ Read [AGENTS.md](AGENTS.md) (upstream conventions) and [PROTOCOL.md](PROTOCOL.md
 Claim a task by opening an issue or PR titled with the task id. Keep PRs small.
 
 ### Phase 0 — toolchain & baseline
-- [ ] **T0.1** Finish MSVC Build Tools install; `cd linux && cargo test -p opendisplay-proto -p opendisplay-session -p od-fake-sender` passes on Windows.
+- [x] **T0.1** (done 2026-11-08: 54 tests pass on Windows MSVC) Finish MSVC Build Tools install; `cd linux && cargo test -p opendisplay-proto -p opendisplay-session -p od-fake-sender` passes on Windows.
 - [ ] **T0.2** Add a GitHub Actions `windows-latest` job running the above.
 
 ### Phase 1 — Windows receiver (PC as display)
@@ -48,7 +48,8 @@ Claim a task by opening an issue or PR titled with the task id. Keep PRs small.
 winget install Rustlang.Rustup
 winget install Microsoft.VisualStudio.2022.BuildTools --override "--quiet --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
 cd linux
-cargo test -p opendisplay-proto -p opendisplay-session
+$env:CARGO_TARGET_DIR="C:odt"   # short path avoids LNK1104 (MAX_PATH) in deep checkouts
+cargo test -p opendisplay-proto -p opendisplay-session -p od-fake-sender
 ```
 
 ## Conventions
@@ -59,3 +60,4 @@ cargo test -p opendisplay-proto -p opendisplay-session
 
 ## Log
 - 2026-11-08: repo created; Rust installed; MSVC install pending; survey written.
+- 2026-11-08: MSVC Build Tools installed; T0.1 done. Tip: deep checkout paths cause LNK1104, set CARGO_TARGET_DIR to a short path. Repo made public.
