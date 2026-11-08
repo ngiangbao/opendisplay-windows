@@ -9,6 +9,7 @@
 
 mod capture;
 mod cursor;
+mod dpi;
 mod input;
 pub mod monitors;
 pub mod vdd;
@@ -249,6 +250,13 @@ fn prepare_virtual(spec: &DisplaySpec) -> Result<Monitor> {
             .unwrap_or(0);
         monitors::set_mode(&m.name, w, h, hz, Some((x, 0)))?;
         std::thread::sleep(Duration::from_millis(800));
+    }
+    // Match the receiver's own scale (an iPad is 2x) so the desktop is the
+    // size the device would show natively; best effort.
+    let want = (spec.scale * 100.0).round() as u32;
+    match dpi::set(&m.name, want) {
+        Ok(got) => info!("display scale of {}: {got}%", m.name),
+        Err(e) => info!("could not set the display scale ({e:#}); leaving it as Windows chose"),
     }
     find()?.ok_or_else(|| anyhow::anyhow!("the virtual display disappeared after the mode change"))
 }

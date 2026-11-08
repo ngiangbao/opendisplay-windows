@@ -52,6 +52,7 @@ futures-lite = { version = "2.6", optional = true }
 # Windows backend: DXGI Desktop Duplication capture, SendInput, monitor queries.
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.62", features = [
+    "Win32_Devices_Display",
     "Win32_Foundation",
     "Win32_Graphics_Direct3D",
     "Win32_Graphics_Direct3D11",
