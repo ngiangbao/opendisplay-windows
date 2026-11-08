@@ -2,10 +2,15 @@
 //! panel: physical pixels, refresh, scale, and the name `waylandsink` needs
 //! for `fullscreen-output`.
 
+#[cfg(target_os = "linux")]
 use std::collections::BTreeMap;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
+#[cfg(target_os = "linux")]
+use anyhow::bail;
+#[cfg(target_os = "linux")]
 use wayland_client::protocol::{wl_output, wl_registry};
+#[cfg(target_os = "linux")]
 use wayland_client::{Connection, Dispatch, QueueHandle};
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -28,12 +33,14 @@ impl OutputInfo {
     }
 }
 
+#[cfg(target_os = "linux")]
 #[derive(Default)]
 struct State {
     outputs: BTreeMap<u32, OutputInfo>,
     too_old: bool,
 }
 
+#[cfg(target_os = "linux")]
 impl Dispatch<wl_registry::WlRegistry, ()> for State {
     fn event(
         state: &mut Self,
@@ -62,6 +69,7 @@ impl Dispatch<wl_registry::WlRegistry, ()> for State {
     }
 }
 
+#[cfg(target_os = "linux")]
 impl Dispatch<wl_output::WlOutput, u32> for State {
     fn event(
         state: &mut Self,
@@ -99,6 +107,7 @@ impl Dispatch<wl_output::WlOutput, u32> for State {
 }
 
 /// All outputs of the compositor named by `WAYLAND_DISPLAY`.
+#[cfg(target_os = "linux")]
 pub fn enumerate() -> Result<Vec<OutputInfo>> {
     let conn = Connection::connect_to_env().context("connecting to the Wayland display")?;
     let mut queue = conn.new_event_queue::<State>();
@@ -115,6 +124,12 @@ pub fn enumerate() -> Result<Vec<OutputInfo>> {
         .into_values()
         .filter(|o| o.width > 0 && o.height > 0)
         .collect())
+}
+
+/// Not implemented outside Linux yet (T1.2 adds the Windows monitor query).
+#[cfg(not(target_os = "linux"))]
+pub fn enumerate() -> Result<Vec<OutputInfo>> {
+    anyhow::bail!("output enumeration is not implemented on this platform; pass --width/--height")
 }
 
 /// Pick the output named `name`, or the first one.

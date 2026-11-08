@@ -28,11 +28,15 @@ tracing-subscriber = { workspace = true }
 serde_json = { workspace = true }
 uuid = { workspace = true }
 mdns-sd = { workspace = true }
-wayland-client = { workspace = true }
 gstreamer = { workspace = true, optional = true }
 gstreamer-app = { workspace = true, optional = true }
 gtk4 = { workspace = true, optional = true }
 gst-plugin-gtk4 = { workspace = true, optional = true }
+
+# Linux-only: Wayland output enumeration and logind. On Windows build with
+# `--no-default-features` (T1.1); the Windows presenter lands in T1.3.
+[target.'cfg(target_os = "linux")'.dependencies]
+wayland-client = { workspace = true }
 zbus = { workspace = true, optional = true }
 
 [dev-dependencies]
