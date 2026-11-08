@@ -34,6 +34,11 @@ Claim a task by opening an issue or PR titled with the task id. Keep PRs small.
 - [ ] **T1.5** Power events (`WM_POWERBROADCAST`) in place of logind (`power.rs`).
 - [~] **T1.6** installer done: `windows/build-installer.ps1` builds the single-exe static-CRT release and an Inno Setup installer (`windows/opendisplay.iss`) (optional firewall rule). Not yet: code signing, auto-start, tray icon, no console window, CI release workflow.
 
+### Phase 3 — one app
+- [x] **T3.1** (done 2026-11-09) single exe: new crate `linux/crates/opendisplay` (Windows-only, empty stub elsewhere) calls `od_receiver::cli::run_cli` and `od_sender::run_cli` in-process. How: `od-sender` is now lib + thin bin (`src/lib.rs` holds the old main.rs); `od-receiver` compiles its `main.rs` twice, as the bin and as `pub mod cli` in the lib (`#[path = "main.rs"]` + `extern crate self as od_receiver;`), so keep `run_cli` and avoid `std::process::exit` inside it.
+- [ ] **T3.2** a real front end for the single exe: tray icon or small window with "Use this PC as a display" and "Extend this PC" toggles, both able to run at the same time (receiver owns the main thread, sender on a worker thread with its own tokio runtime), no console window (`windows_subsystem`), app icon.
+- [ ] **T3.3** Installer/runtime smoke test on a clean Windows VM or Windows Sandbox (not done yet; only checked with a scrubbed environment on the dev machine).
+
 ### Phase 2 — Windows sender (extend PC to iPhone/iPad/Android/Mac)
 - [x] **T2.1** (done 2026-11-08) design written: [windows/DESIGN-sender.md](windows/DESIGN-sender.md). Recommendation: MVP adopts an existing monitor (no driver), DXGI Desktop Duplication + OpenH264 + SendInput; IddCx virtual display driver is an optional later step. Revised task list T2.2-T2.9 is in that file (it replaces the T2.2-T2.6 lines below). Open questions for the maintainer are at its end.
 - [x] **T2.2** (done 2026-11-09) `od-sender` builds and its 78 unit tests pass on Windows (`cargo test -p od-sender --no-default-features`). How: Linux-only deps moved to `[target.'cfg(target_os = "linux")'.dependencies]`; Wayland/PipeWire/D-Bus modules and the FFmpeg encoders are `cfg(target_os = "linux")`; Windows stand-ins: `backend/detect_win.rs` (always "unsupported" until T2.3), `doctor_win.rs`, `encoder/nostage.rs` (no convert stage, OpenH264 only), Windows branches in `backend/lock.rs` (share-mode lock in `%LOCALAPPDATA%OpenDisplay`), `disconnect.rs` (taskkill), `session.rs` (Ctrl+C/Break/close), `config.rs` (`%APPDATA%OpenDisplaysender.toml`). **Not verified on Linux** (no Linux machine here): the Linux paths are unchanged code behind `cfg(linux)`, but please run `cargo test -p od-sender` on Linux if you can. NEXT: T2.3 (`backend/windows`, replace `detect_win.rs`).
@@ -43,7 +48,7 @@ Claim a task by opening an issue or PR titled with the task id. Keep PRs small.
 - [ ] **T2.6** `od-sender doctor` for Windows; config path under `%APPDATA%`.
 
 ## Release
-Prerelease **v0.1.0-receiver** ships `OpenDisplay-Receiver-Setup-0.1.0.exe` (receiver only; unsigned, so SmartScreen will warn). Rebuild with `windows/build-installer.ps1` (needs Rust, MSVC Build Tools, Inno Setup 6).
+**v0.2.0** ships one installer, `OpenDisplay-Setup-0.2.0.exe`, containing ONE executable `opendisplay.exe` (receiver + sender). `opendisplay` = receiver window; `opendisplay receive [opts]`; `opendisplay send [opts]` (sender: no display backend yet, see T2.3). v0.1.0-receiver (two-part, receiver only) is superseded. Unsigned, so SmartScreen warns. Rebuild: `windowsuild-installer.ps1` (Rust, MSVC Build Tools, Inno Setup 6). The exe imports only system DLLs (static CRT), requires Windows 10+ x64 (ARM64 runs it under emulation).
 
 ## Review log (2026-11-09, review of the other agent's T0.2/T1.2 work + portability audit)
 - T1.2 monitor enumeration (`outputs.rs`, windows-sys): reviewed, unsafe blocks are sound; GetDpiForMonitor needs Windows 8.1+. Fixed: monitors are now sorted primary-first (previously `pick(None)` could choose a secondary monitor while the fullscreen window opens on the primary).
@@ -88,3 +93,4 @@ cargo test -p opendisplay-proto -p opendisplay-session -p od-fake-sender
 - 2026-11-08: T1.3 + T1.4 (mouse) done, installer script added, v0.1.0-receiver prerelease published. Open: T1.5 power events, T1.4 touch/pen follow-up, and remaining T1.6 work.
 - 2026-11-08: T2.1 design doc added (`windows/DESIGN-sender.md`). Next unclaimed: T2.2 (make `od-sender` compile on Windows).
 - 2026-11-09: T2.2 done (od-sender compiles + tests on Windows, CI step added). `od-sender doctor` runs and reports no backend; `run` exits 2 with a pointer to T2.3. Next unclaimed: T2.3.
+- 2026-11-09: reviewed the other agent's commits (see Review log), fixed state-dir bug; T3.1 single exe done; v0.2.0 installer built. Heads-up for whoever edits `od-receiver/src/main.rs` (T1.5): it is also compiled into the lib as `cli`; keep it free of `process::exit`.
