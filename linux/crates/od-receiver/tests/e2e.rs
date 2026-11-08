@@ -276,7 +276,12 @@ async fn silent_newcomers_leave_a_streaming_sender_alone() {
     assert_eq!(report.connections, 3, "{report:?}");
     assert_eq!(report.adopted_over_live, 0, "{report:?}");
     assert_eq!(report.welcomes, 1, "{report:?}");
-    assert_eq!(report.video_frames, s.frames_sent, "{report:?} vs {s:?}");
+    // The last frame can still be in flight when the sender stops (seen on slow
+    // Windows runners: 120 received vs 121 sent), so allow a small gap.
+    assert!(
+        report.video_frames <= s.frames_sent && report.video_frames + 2 >= s.frames_sent,
+        "{report:?} vs {s:?}"
+    );
 }
 
 /// `sleeping` before a suspend (logind in the binary, a fake here) and
