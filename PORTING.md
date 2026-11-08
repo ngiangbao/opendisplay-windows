@@ -6,9 +6,8 @@ Read [AGENTS.md](AGENTS.md) (upstream conventions) and [PROTOCOL.md](PROTOCOL.md
 ## Done
 - Repo created from upstream snapshot (no upstream history), README with goals.
 - Surveyed `linux/` Rust workspace (see "Findings").
-- Rust 1.99.1 installed on the dev machine; MSVC Build Tools install was started
-  (needed for the `x86_64-pc-windows-msvc` linker). **No Windows code written yet.
-  Nothing has been built or tested on Windows yet.**
+- Rust 1.99.1 and MSVC Build Tools installed; the portable Rust baseline passes
+  all 54 tests on Windows MSVC.
 
 ## Findings
 | Crate | Windows readiness |
@@ -25,7 +24,7 @@ Claim a task by opening an issue or PR titled with the task id. Keep PRs small.
 
 ### Phase 0 — toolchain & baseline
 - [x] **T0.1** (done 2026-11-08: 54 tests pass on Windows MSVC) Finish MSVC Build Tools install; `cd linux && cargo test -p opendisplay-proto -p opendisplay-session -p od-fake-sender` passes on Windows.
-- [ ] **T0.2** Add a GitHub Actions `windows-latest` job running the above.
+- [x] **T0.2** Add a GitHub Actions `windows-latest` job running the above.
 
 ### Phase 1 — Windows receiver (PC as display)
 - [x] **T1.1** (done 2026-11-08) `cargo build/test -p od-receiver --no-default-features` works on Windows; `wayland-client`/`zbus` are Linux-only target deps, `outputs::enumerate` has a non-Linux stub. `od-receiver --sink none --width 1920 --height 1080` listens on :9000 and advertises mDNS. Next: T1.2/T1.3.
@@ -58,7 +57,14 @@ cargo test -p opendisplay-proto -p opendisplay-session -p od-fake-sender
 - Prefer `cfg` gating over forking files, so upstream merges stay easy.
 - Record decisions and blockers in this file (append to "Log").
 
+## Current handoff
+- T0.2 is complete: `.github/workflows/windows.yml` runs the three portable
+  crates on `windows-latest`. No task is currently claimed by this agent; T1.2
+  (Windows monitor enumeration/DPI) and T1.3 (presenter) are ready to pick up.
+
 ## Log
-- 2026-11-08: repo created; Rust installed; MSVC install pending; survey written.
-- 2026-11-08: MSVC Build Tools installed; T0.1 done. Tip: deep checkout paths cause LNK1104, set CARGO_TARGET_DIR to a short path. Repo made public.
+- 2026-11-08: added `.github/workflows/windows.yml` to run the portable-crate
+  baseline continuously on `windows-latest` (T0.2).
 - 2026-11-08: T1.1 done (receiver builds/tests on Windows with --no-default-features; sink none runs). Files are CRLF in Windows checkouts: use sed tolerant of \r. No python on the dev machine.
+- 2026-11-08: MSVC Build Tools installed; T0.1 done. Tip: deep checkout paths cause LNK1104, set CARGO_TARGET_DIR to a short path. Repo made public.
+- 2026-11-08: repo created; Rust installed; MSVC install pending; survey written.
