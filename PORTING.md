@@ -28,7 +28,7 @@ Claim a task by opening an issue or PR titled with the task id. Keep PRs small.
 - [ ] **T0.2** Add a GitHub Actions `windows-latest` job running the above.
 
 ### Phase 1 — Windows receiver (PC as display)
-- [ ] **T1.1** Cargo-gate Linux-only deps in `od-receiver` with `cfg(target_os = "linux")` / target-specific dependencies; make `cargo build -p od-receiver --no-default-features` work on Windows (`--sink none`).
+- [x] **T1.1** (done 2026-11-08) `cargo build/test -p od-receiver --no-default-features` works on Windows; `wayland-client`/`zbus` are Linux-only target deps, `outputs::enumerate` has a non-Linux stub. `od-receiver --sink none --width 1920 --height 1080` listens on :9000 and advertises mDNS. Next: T1.2/T1.3.
 - [ ] **T1.2** Replace `outputs.rs` (Wayland output size/scale) with a Windows implementation (monitor size, DPI via `windows` crate).
 - [ ] **T1.3** Windows presenter: window + H.264/HEVC decode. Candidates: GStreamer (`d3d11h264dec` + `d3d11videosink`) via the existing `video.rs`, or Media Foundation. Fullscreen on chosen monitor.
 - [ ] **T1.4** Pointer/touch input → protocol touch/scroll messages (`input.rs`).
@@ -61,3 +61,4 @@ cargo test -p opendisplay-proto -p opendisplay-session -p od-fake-sender
 ## Log
 - 2026-11-08: repo created; Rust installed; MSVC install pending; survey written.
 - 2026-11-08: MSVC Build Tools installed; T0.1 done. Tip: deep checkout paths cause LNK1104, set CARGO_TARGET_DIR to a short path. Repo made public.
+- 2026-11-08: T1.1 done (receiver builds/tests on Windows with --no-default-features; sink none runs). Files are CRLF in Windows checkouts: use sed tolerant of \r. No python on the dev machine.
