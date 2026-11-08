@@ -14,6 +14,8 @@ default = ["gstreamer", "gtk", "logind"]
 gstreamer = ["dep:gstreamer", "dep:gstreamer-app"]
 # The GTK 4 window presenter (fullscreen, input, cursor overlay).
 gtk = ["gstreamer", "dep:gtk4", "dep:gst-plugin-gtk4"]
+# Portable presenter: OpenH264 software decode + winit/softbuffer window (Windows).
+winui = ["dep:winit", "dep:softbuffer", "dep:openh264"]
 # Tell the sender `sleeping` before a suspend (logind PrepareForSleep).
 logind = ["dep:zbus"]
 
@@ -32,6 +34,9 @@ gstreamer = { workspace = true, optional = true }
 gstreamer-app = { workspace = true, optional = true }
 gtk4 = { workspace = true, optional = true }
 gst-plugin-gtk4 = { workspace = true, optional = true }
+winit = { version = "0.30", optional = true }
+softbuffer = { version = "0.4", optional = true }
+openh264 = { workspace = true, optional = true }
 
 # Linux-only: Wayland output enumeration and logind. On Windows build with
 # `--no-default-features` (T1.1); the Windows presenter lands in T1.3.

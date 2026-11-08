@@ -5,7 +5,7 @@ use spare devices as extra monitors, with the same wire protocol
 ([PROTOCOL.md](PROTOCOL.md)) so existing iPhone / iPad / Android / Mac / Linux
 apps keep working.
 
-> **Status: work in progress.** This repository starts as a copy of upstream
+> **Status: receiver alpha.** A Windows PC can act as a display for a Mac/Linux sender (installer in Releases). The Windows *sender* is not started. See [PORTING.md](PORTING.md).
 > (v1.30.2, GPL-3.0). The Windows work lives in the Rust workspace under
 > [`linux/`](linux/), whose crates are mostly platform-neutral.
 

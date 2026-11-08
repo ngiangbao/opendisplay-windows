@@ -27,6 +27,8 @@ pub enum SinkKind {
     /// `fakesink`: decode but do not present (CI, headless decode checks).
     Fake,
     /// No pipeline at all: protocol-only (CI without GStreamer).
+    /// OpenH264 + softbuffer window (`winui` feature), the Windows presenter.
+    Soft,
     None,
 }
 
@@ -40,9 +42,10 @@ impl std::str::FromStr for SinkKind {
             "auto" => SinkKind::Auto,
             "fake" => SinkKind::Fake,
             "none" => SinkKind::None,
+            "soft" => SinkKind::Soft,
             other => {
                 return Err(format!(
-                    "unknown sink `{other}` (gtk|gl|wayland|auto|fake|none)"
+                    "unknown sink `{other}` (gtk|gl|wayland|auto|fake|soft|none)"
                 ));
             }
         })
@@ -58,6 +61,7 @@ impl std::fmt::Display for SinkKind {
             SinkKind::Auto => "auto",
             SinkKind::Fake => "fake",
             SinkKind::None => "none",
+            SinkKind::Soft => "soft",
         })
     }
 }
@@ -128,6 +132,7 @@ impl VideoOutput for NullOutput {
 pub fn open(cfg: &VideoConfig) -> Result<Box<dyn VideoOutput>> {
     match cfg.sink {
         SinkKind::None => Ok(Box::new(NullOutput::default())),
+        SinkKind::Soft => anyhow::bail!("--sink soft owns the main thread; main starts it"),
         #[cfg(feature = "gstreamer")]
         _ => Ok(Box::new(gst_out::GstOutput::new(cfg)?)),
         #[cfg(not(feature = "gstreamer"))]
@@ -196,7 +201,7 @@ pub mod gst_out {
             SinkKind::Gtk => "gtk4paintablesink name=gtksink sync=false".into(),
             SinkKind::Auto => "autovideosink sync=false".into(),
             SinkKind::Fake => "fakesink sync=false".into(),
-            SinkKind::None => unreachable!(),
+            SinkKind::None | SinkKind::Soft => unreachable!(),
         };
         // appsrc is unbounded and never drops: dropping *encoded* frames would
         // break the reference chain. Latest-wins happens after the decoder, in

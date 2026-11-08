@@ -28,11 +28,11 @@ Claim a task by opening an issue or PR titled with the task id. Keep PRs small.
 
 ### Phase 1 — Windows receiver (PC as display)
 - [x] **T1.1** (done 2026-11-08) `cargo build/test -p od-receiver --no-default-features` works on Windows; `wayland-client`/`zbus` are Linux-only target deps, `outputs::enumerate` has a non-Linux stub. `od-receiver --sink none --width 1920 --height 1080` listens on :9000 and advertises mDNS. Next: T1.2/T1.3.
-- [ ] **T1.2** Replace `outputs.rs` (Wayland output size/scale) with a Windows implementation (monitor size, DPI via `windows` crate).
-- [ ] **T1.3** Windows presenter: window + H.264/HEVC decode. Candidates: GStreamer (`d3d11h264dec` + `d3d11videosink`) via the existing `video.rs`, or Media Foundation. Fullscreen on chosen monitor.
-- [ ] **T1.4** Pointer/touch input → protocol touch/scroll messages (`input.rs`).
+- [ ] **T1.2** (claimed by another agent, see "In progress" below) native Windows monitor enumeration for `outputs::enumerate` and `--output`. FYI the `winui` path already reads the primary monitor through winit (`win_ui::primary_monitor`), which is enough for the single-monitor case.
+- [x] **T1.3** (done 2026-11-08) `--sink soft` (feature `winui`, default on Windows): OpenH264 software decode + winit/softbuffer window, `crates/od-receiver/src/win_ui.rs`. Verified end to end with `od-fake-sender` (180 frames, 0 decode errors, ~2.5 ms decode). H.264 only (no HEVC), CPU decode, no GPU path yet. Follow-ups: GPU decode (Media Foundation/D3D11) and HEVC.
+- [x] **T1.4** (done, mouse only) left-button drag -> touch, wheel -> scroll via `input.rs`. TODO: real touchscreen/pen events, cursor overlay from the sender cursor channel.
 - [ ] **T1.5** Power events (`WM_POWERBROADCAST`) in place of logind (`power.rs`).
-- [ ] **T1.6** Bonjour/mDNS advertise check on Windows firewall; document firewall prompt; installer or zip release.
+- [~] **T1.6** installer done: `windows/build-installer.ps1` builds a static-CRT release and an Inno Setup installer (optional firewall rule). Not yet: code signing, auto-start, tray icon, no console window, CI release workflow.
 
 ### Phase 2 — Windows sender (extend PC to iPhone/iPad/Android/Mac)
 - [ ] **T2.1** Design doc: virtual display options (IddCx indirect display driver, or integrate an existing signed driver such as Virtual Display Driver / parsec-vdd). Driver signing is the main risk — decide here.
@@ -41,6 +41,14 @@ Claim a task by opening an issue or PR titled with the task id. Keep PRs small.
 - [ ] **T2.4** Encode: reuse openh264/x264 first; later Media Foundation / NVENC hardware.
 - [ ] **T2.5** Input injection from receiver touch/scroll via `SendInput`.
 - [ ] **T2.6** `od-sender doctor` for Windows; config path under `%APPDATA%`.
+
+## Release
+Prerelease **v0.1.0-receiver** ships `OpenDisplay-Receiver-Setup-0.1.0.exe` (receiver only; unsigned, so SmartScreen will warn). Rebuild with `windowsuild-installer.ps1` (needs Rust, MSVC Build Tools, Inno Setup 6).
+
+## Known issues
+- `tests/e2e` `silent_newcomers_leave_a_streaming_sender_alone` is timing-flaky (off by one frame when the machine is busy); it passed on reruns.
+- Windows sender (Phase 2) is **not started**; it needs a virtual display driver and is the main open work.
+- Never run the installer/firewall steps on someone else machine without telling them.
 
 ## How to build (Windows)
 ```powershell
@@ -69,3 +77,4 @@ cargo test -p opendisplay-proto -p opendisplay-session -p od-fake-sender
 - 2026-11-08: T1.1 done (receiver builds/tests on Windows with --no-default-features; sink none runs). Files are CRLF in Windows checkouts: use sed tolerant of \r. No python on the dev machine.
 - 2026-11-08: MSVC Build Tools installed; T0.1 done. Tip: deep checkout paths cause LNK1104, set CARGO_TARGET_DIR to a short path. Repo made public.
 - 2026-11-08: repo created; Rust installed; MSVC install pending; survey written.
+- 2026-11-08: T1.3 + T1.4 (mouse) done, installer script added, v0.1.0-receiver prerelease published. Open: T1.2 monitor picking (claimed by another agent), T1.5 power events, all of Phase 2.

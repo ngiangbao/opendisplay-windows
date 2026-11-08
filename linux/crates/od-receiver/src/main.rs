@@ -69,6 +69,8 @@ struct Args {
 fn default_sink() -> SinkKind {
     if cfg!(feature = "gtk") {
         SinkKind::Gtk
+    } else if cfg!(feature = "winui") {
+        SinkKind::Soft
     } else {
         SinkKind::Gl
     }
@@ -244,9 +246,16 @@ fn main() -> Result<()> {
         .with_target(false)
         .init();
     let a = Args::parse();
+    #[cfg(feature = "winui")]
+    if a.sink == SinkKind::Soft {
+        return win_main(a);
+    }
     #[cfg(feature = "gtk")]
     if a.sink == SinkKind::Gtk {
         return gtk_main(a);
+    }
+    if a.sink == SinkKind::Soft {
+        anyhow::bail!("built without the `winui` feature; pick another --sink");
     }
     if a.sink == SinkKind::Gtk {
         anyhow::bail!("built without the `gtk` feature; pick another --sink");
@@ -368,6 +377,81 @@ fn gtk_main(a: Args) -> Result<()> {
     gtk_ui::run(options, sink, input_tx, move || {
         let _ = tx.send(true);
     })?;
+    worker
+        .join()
+        .map_err(|_| anyhow::anyhow!("receiver thread panicked"))?
+}
+
+/// Windows: the winit window owns the main thread, the receiver loop runs on
+/// a worker thread (same shape as `gtk_main`).
+#[cfg(feature = "winui")]
+fn win_main(a: Args) -> Result<()> {
+    use od_receiver::video::VideoOutput;
+    use od_receiver::win_ui::{self, WindowOptions};
+    use std::sync::Arc;
+
+    let (mut event_loop, soft) = win_ui::prepare()?;
+    let guess = match win_ui::primary_monitor(&mut event_loop) {
+        Some(m) => {
+            info!(
+                "monitor {}: {}x{} scale {} {:?} Hz",
+                m.name, m.pixels.0, m.pixels.1, m.scale, m.refresh_hz
+            );
+            PanelGuess {
+                pixels: Some(m.pixels),
+                scale: Some(m.scale),
+                points: None,
+                refresh: m.refresh_hz,
+                output: Some(m.name),
+            }
+        }
+        None => PanelGuess {
+            output: a.output.clone(),
+            ..Default::default()
+        },
+    };
+    let install_id = id::load_or_create()?;
+    let hello = hello(&a, guess, &install_id)?;
+
+    let rt = tokio::runtime::Runtime::new()?;
+    let (input_tx, input_rx) = tokio::sync::mpsc::unbounded_channel();
+    // The window keeps its own handle on the shared frame; the receiver gets
+    // the decoding half.
+    let probe = soft.shared_handle();
+    let video: Box<dyn VideoOutput> = Box::new(soft);
+    let receiver = rt
+        .block_on(Receiver::bind(config(&a, hello), video))?
+        .with_input(input_rx)
+        .with_power(power_events());
+    let (tx, rx) = watch::channel(false);
+    let tx = Arc::new(tx);
+    let windowed = a.windowed;
+    let worker = {
+        let tx = tx.clone();
+        std::thread::Builder::new()
+            .name("receiver".into())
+            .spawn(move || {
+                rt.block_on(async {
+                    tokio::spawn(async move {
+                        let _ = tokio::signal::ctrl_c().await;
+                        info!("shutting down");
+                        let _ = tx.send(true);
+                    });
+                    serve(&a, receiver, &install_id, rx).await
+                })
+            })?
+    };
+    win_ui::run(
+        event_loop,
+        probe,
+        WindowOptions {
+            windowed,
+        },
+        input_tx,
+        move || {
+            let _ = tx.send(true);
+        },
+    )?;
     worker
         .join()
         .map_err(|_| anyhow::anyhow!("receiver thread panicked"))?
