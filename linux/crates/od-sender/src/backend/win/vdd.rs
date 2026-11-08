@@ -1,6 +1,7 @@
 //! Extended display through the signed, MIT-licensed
 //! [Virtual Display Driver](https://github.com/VirtualDrivers/Virtual-Display-Driver)
-//! (an IddCx indirect display driver; `winget install VirtualDrivers.Virtual-Display-Driver`).
+//! (an IddCx indirect display driver). Note: the winget package of that name only installs
+//! the "VDD Control" app, not the driver; `windows/install-vdd.ps1` installs the driver.
 //!
 //! The driver always presents one virtual monitor once installed. Its modes
 //! come from `C:\VirtualDisplayDriver\vdd_settings.xml`; writing a new
@@ -110,8 +111,8 @@ pub fn reload() -> Result<()> {
 
 pub fn not_installed_message() -> String {
     "No second screen to extend onto. Install the free virtual display driver once \
-     (winget install --id VirtualDrivers.Virtual-Display-Driver -e, or the Install button in \
-     OpenDisplay), then try again. To just mirror your main screen instead, use --output DISPLAY1."
+     (the Install button in the OpenDisplay window, or windows\\install-vdd.ps1 from the \
+     repository), then try again. To just mirror your main screen instead, use --output DISPLAY1."
         .to_string()
 }
 

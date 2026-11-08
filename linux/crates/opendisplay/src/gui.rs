@@ -24,6 +24,9 @@ use nwd::NwgUi;
 use nwg::NativeUi;
 
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+/// The Virtual Display Driver installer we offer (official release, pinned).
+const VDD_URL: &str = "https://github.com/VirtualDrivers/Virtual-Display-Driver/releases/download/25.5.2/Virtual.Display.Driver-v25.05.03-setup-x64.exe";
+const VDD_SHA256: &str = "CA10B85BABECFB636C85B3F04D2306968D4F940DD3DD35767F866207BFBA846E";
 const MAX_LOG_LINES: usize = 300;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -249,7 +252,7 @@ impl App {
     fn on_install(&self) {
         let params = nwg::MessageParams {
             title: "Install extended-display driver",
-            content: "OpenDisplay will install the free, open-source Virtual Display Driver (MIT, signed) with winget. Windows will ask for permission. Continue?",
+            content: "OpenDisplay will download the free, open-source Virtual Display Driver 25.5.2 (MIT licence) from its official GitHub release, check its SHA-256, and run its installer as administrator.\r\n\r\nWindows will then ask \"Would you like to install this device software?\" with publisher \"SignPath Foundation\" (the driver's signer): choose Install. This adds that publisher to Windows' trusted publishers.\r\n\r\nContinue?",
             buttons: nwg::MessageButtons::YesNo,
             icons: nwg::MessageIcons::Question,
         };
@@ -257,21 +260,24 @@ impl App {
             return;
         }
         const CREATE_NEW_CONSOLE: u32 = 0x0000_0010;
-        let r = Command::new("winget")
-            .args([
-                "install",
-                "--id",
-                "VirtualDrivers.Virtual-Display-Driver",
-                "-e",
-                "--accept-package-agreements",
-                "--accept-source-agreements",
-            ])
+        // Pinned release + hash: the installer is not code-signed, only the driver inside it is.
+        let script = format!(
+            "$ErrorActionPreference='Stop'; $u='{VDD_URL}'; $f=Join-Path $env:TEMP 'vdd-setup.exe'; \
+             Write-Host 'Downloading the Virtual Display Driver installer...'; \
+             Invoke-WebRequest -Uri $u -OutFile $f -UseBasicParsing; \
+             if ((Get-FileHash $f -Algorithm SHA256).Hash -ne '{VDD_SHA256}') {{ Remove-Item $f; throw 'SHA-256 mismatch: refusing to run the installer' }}; \
+             Write-Host 'Running the installer. Click Install when Windows asks about the device software.'; \
+             Start-Process -FilePath $f -ArgumentList '/SILENT','/SUPPRESSMSGBOXES','/NORESTART','/SP-' -Verb RunAs -Wait; \
+             Write-Host 'Done. You can close this window and press Start in OpenDisplay.'; Start-Sleep -Seconds 5"
+        );
+        let r = Command::new("powershell")
+            .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", &script])
             .creation_flags(CREATE_NEW_CONSOLE)
             .spawn();
         match r {
             Ok(_) => self.log("[extend] installing the virtual display driver (see the console window); press Start when it finishes"),
             Err(e) => {
-                self.log(&format!("[extend] could not run winget ({e}); opening the driver's download page instead"));
+                self.log(&format!("[extend] could not run PowerShell ({e}); opening the driver's download page instead"));
                 let _ = Command::new("cmd")
                     .args(["/c", "start", "", "https://github.com/VirtualDrivers/Virtual-Display-Driver/releases"])
                     .creation_flags(CREATE_NO_WINDOW)
